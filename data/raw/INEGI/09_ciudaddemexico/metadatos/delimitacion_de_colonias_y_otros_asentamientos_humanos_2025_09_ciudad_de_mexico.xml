@@ -1,0 +1,375 @@
+<?xml version = "1.0" encoding = "ISO-8859-1"?>
+<Metadata>
+<MD_DataIdentification>
+<title>Delimitación de colonias y otros asentamientos humanos 2025 (09-Ciudad de México).</title>
+<purpose>Proporcionar a las Unidades de Estado (UE) y a la sociedad en general una delimitación de polígonos de colonias y otros asentamientos humanos de áreas físicamente localizadas, publicada, y debidamente acreditada por las autoridades municipales. Con este producto se pretende cubrir la necesidad de los usuarios que podrán utilizar la delimitación y los atributos de los polígonos de asentamientos humanos para cruzarla con otra información de índole geográfica como son: manzanas, calles, límites, códigos postales, AGEBS, y obtener como resultado información que sirva como base de estudio, análisis y apoyo en la toma de decisiones sobre temas geográficos, sociales, demográficos, económicos, culturales, históricos, políticos, entre otros. Es importante mencionar que aún no se cuenta con la cobertura completa a nivel nacional.
+Se prevé, en el corto plazo, que la publicación de la delimitación de asentamientos humanos y su difusión se convierta en un valioso instrumento que enriquezca la información geográfica de la que dispone el Instituto, así como los sistemas geográficos que genere el usuario ya sea interno o externo.
+</purpose>
+<abstract>La Delimitación de colonias y otros asentamientos humanos 2025 (09-Ciudad de México), es un producto resultado de un trabajo conjunto entre las autoridades municipales de los Estados de la República Mexicana y el Instituto Nacional de Estadística y Geografía (INEGI).
+
+Conforme a los artículos 115, fracción V, incisos a) y d) Constitucional, 11, fracción III y 59 de la Ley General de Asentamientos Humanos, Ordenamiento Territorial y Desarrollo Urbano (LGAHOTDU), corresponde a los municipios formular, aprobar y administrar la zonificación de los centros de población ubicados en su territorio, y en ese sentido, son responsables de identificar y delimitar las áreas que integran los asentamientos humanos los cuales consideran diferentes tipos: aeropuerto, ampliación, barrio, cantón, ciudad, ciudad industrial, colonia, condominio, conjunto habitacional, corredor industrial, coto, cuartel, ejido, exhacienda, fracción, fraccionamiento, granja,  hacienda, ingenio, manzana, paraje, parque industrial, privada, prolongación, pueblo, puerto, ranchería, rancho, región, residencial, rinconada, sección, sector, supermanzana, unidad, unidad habitacional, villa, zona federal, zona industrial, zona militar, ninguno, zona naval (para mayor detalle sobre las cantidades correspondientes a cada tipo, remitirse al punto 7.2 del presente documento).
+
+Así, la conformación de colonias y otros asentamientos humanos, se genera a partir de la información proporcionada y validada por las autoridades municipales, quienes tienen competencia en la materia. 
+
+Las delimitaciones de los asentamientos humanos, así como sus actualizaciones, se integran en la capa vectorial denominada as en ciclos anuales de producción, en los cuales se van incorporando las localidades con delimitación de asentamientos humanos entregadas por la autoridad municipal en función de las prioridades de las localidades; siendo la prioridad 1 aquellas mayores a 50,000 habitantes. Es importante mencionar que no se cuenta con una cobertura completa de localidades con delimitación de asentamientos humanos y las temporalidades son distintas en función del año en que fue entregada la información por las autoridades municipales. 
+
+Adicionalmente se considera que un asentamiento humano, es el establecimiento de un conglomerado demográfico, con el conjunto de sus sistemas de convivencia, en un área físicamente localizada, considerando dentro de la misma, los elementos naturales y las obras materiales que lo integran. También es un componente de referencia del Domicilio Geográfico.
+
+Esta obra contiene una carpeta con la clave geoestadística correspondiente al estado de Ciudad de México, la cual a su interior se encuentra integrada por tres subcarpetas:
+
+1. Catálogos. - Contiene el listado de las localidades amanzanadas con la delimitación de asentamientos humanos que se incluyen en la obra.
+
+2. Conjunto_de_datos_shp. - Contiene la delimitación de asentamientos humanos en un archivo shape;
+
+-Asentamientos humanos (capa AS). Representan al conjunto de asentamientos de las localidades amanzanadas que cuentan con esta delimitación. La clave que los distingue se conforma de 13 dígitos: EEMMMLLLLAAAA, donde: EE es la clave del estado, MMM es la clave del municipio, LLLL es la clave de localidad y AAAA es la clave de asentamiento. 
+
+3. Metadatos. - Contiene los metadatos correspondientes a cada entidad federativa. 
+</abstract>
+<MD_DataIdentification_language>ES - Español.</MD_DataIdentification_language>
+<topicCategory>
+<principalTopic>11. Localización: Información posicional y servicios.  </principalTopic>
+<groupCategory>6. Grupo de datos de límites costeros, internacionales, estatales y municipales: Subdivisión de la Infraestructura de Datos Espaciales de México que representa las fronteras de los espacios territoriales contenedores de datos e información.</groupCategory>
+</topicCategory>
+<keyword>Asentamientos Humanos.</keyword>
+<type>2. Lugar: La palabra clave identifica un lugar o ubicación cubierto por el conjunto de datos espaciales o producto.</type>
+<thesaurusName>Asentamientos Humanos.</thesaurusName>
+<edition>1.0 </edition>
+<presentationForm>  5. Mapa digital: Mapa representado en formato raster o vector.</presentationForm>
+<CI_OnlineResource>
+<CI_OnlineResource_linkage>https://www.inegi.org.mx/ </CI_OnlineResource_linkage>
+<CI_OnlineResource_description> </CI_OnlineResource_description>
+</CI_OnlineResource>
+<maintenanceAndUpdateFrequency>  7. Anualmente: Los datos se actualizan cada año.</maintenanceAndUpdateFrequency>
+<MD_DataIdentification_characterSet>  6. 8859parte1: ISO/IEC 8859-1, Tecnologías de la Información - Conjuntos de caracteres gráficos codificados de 8-bit por byte - Parte 1: Alfabeto Latino No.1.</MD_DataIdentification_characterSet>
+<graphfilename> </graphfilename>
+<specuse>(uso externo) Las Unidades de Estado, instituciones educativas y de investigación, así como la sociedad en general utiliza el producto Delimitación de colonias y otros asentamientos humanos 2025 (09-Ciudad de México), para llevar a cabo análisis y estudios referidos a esta delimitación en temas geográficos, sociales, demográficos, económicos, culturales, históricos, políticos, entre otros. Por medio de la utilización de este producto, se podrá identificar la delimitación geográfica de áreas de trabajo facilitando la localización geográfica de los asentamientos humanos de interés, a fin de apoyar en la realización de geoprocesos con información de índole geográfica a nivel vectorial o a nivel tabular. De igual manera es posible la utilización de este producto como medio de consulta general, tanto en su representación vectorial como a nivel de los diferentes atributos inherentes a esta delimitación, ya sea digital o en papel.</specuse>
+</MD_DataIdentification>
+<CI_Date>
+<Dates_Events>
+<date>2025-12-15</date>
+<dateType>1. Creación: Indicador  de la fecha que especifica cuando fue creado el recurso.</dateType>
+</Dates_Events>
+<Ad_Date>
+<date_creation>2025-01-01</date_creation>
+<date_begin></date_begin>
+<date_end></date_end>
+<inpname>Localidades geoestadísticas amanzanadas.</inpname>
+</Ad_Date>
+</CI_Date>
+<CI_ResponsibleParty>
+<CI_ResponsibleParty_individualName>Mtro. J. Armando Aguiar Rodríguez.</CI_ResponsibleParty_individualName>
+<CI_ResponsibleParty_organisationName>Instituto Nacional de Estadística y Geografía - INEGI.</CI_ResponsibleParty_organisationName>
+<CI_ResponsibleParty_positionName>Director de Servicios de Información.</CI_ResponsibleParty_positionName>
+<CI_ResponsibleParty_voice>449 910 5300 Extensiones 31 5486 y 31 5920. Lada 800 111 4634.</CI_ResponsibleParty_voice>
+<CI_ResponsibleParty_facsimile></CI_ResponsibleParty_facsimile>
+<CI_ResponsibleParty_deliveryPoint>Avenida Héroe de Nacozari Sur 2301, Fraccionamiento Jardines del Parque, 20276, Aguascalientes, Aguascalientes, Aguascalientes, entre Calle INEGI, Avenida del Lago y Avenida Paseo de las Garzas.</CI_ResponsibleParty_deliveryPoint>
+<CI_ResponsibleParty_city>Aguascalientes.</CI_ResponsibleParty_city>
+<CI_ResponsibleParty_administrativeArea>Aguascalientes.</CI_ResponsibleParty_administrativeArea>
+<CI_ResponsibleParty_postalCode>20276</CI_ResponsibleParty_postalCode>
+<CI_ResponsibleParty_country>México.</CI_ResponsibleParty_country>
+<CI_ResponsibleParty_electronicMailAddress>atencion.usuarios@inegi.org.mx</CI_ResponsibleParty_electronicMailAddress>
+<CI_ResponsibleParty_linkage>https://www.inegi.org.mx/</CI_ResponsibleParty_linkage>
+<CI_ResponsibleParty_role>  5. Distribuidor: Parte que distribuye el recurso.</CI_ResponsibleParty_role>
+</CI_ResponsibleParty>
+<geographicElement>
+<EX_GeographicBoundingBox>
+<westBoundLongitude>-99.364</westBoundLongitude>
+<eastBoundLongitude>-98.940</eastBoundLongitude>
+<southBoundLatitude>19.048</southBoundLatitude>
+<northBoundLatitude>19.592</northBoundLatitude>
+</EX_GeographicBoundingBox>
+<spatialRepresentationType>1. Vector: Los datos vectoriales se utilizan para representar datos espaciales.</spatialRepresentationType>
+</geographicElement>
+<MD_ReferenceSystem>
+<ReferenceHorizontalSystem>
+<geograph>
+<latres></latres>
+<longres></longres>
+<geogunit></geogunit>
+</geograph>
+<planar>
+<mapprojn>
+<lambertc>
+<lambertc_stdparll>17.5</lambertc_stdparll>
+<lambertc_stdparll>29.5</lambertc_stdparll>
+<lambertc_longcm>-102.0</lambertc_longcm>
+<lambertc_latprjo>12.0</lambertc_latprjo>
+<lambertc_feast>2500000.0</lambertc_feast>
+<lambertc_fnorth>0.0</lambertc_fnorth>
+</lambertc>
+<mercatort>
+<mercatort_sfctrmer> </mercatort_sfctrmer>
+<mercatort_longcm> </mercatort_longcm>
+<mercatort_latprjo> </mercatort_latprjo>
+<mercatort_feast> </mercatort_feast>
+<mercatort_fnorth> </mercatort_fnorth>
+</mercatort>
+<mercator>
+<mercator_stdparll> </mercator_stdparll>
+<mercator_sfec> </mercator_sfec>
+<mercator_longcm> </mercator_longcm>
+<mercator_feast> </mercator_feast>
+<mercator_fnorth> </mercator_fnorth>
+</mercator>
+<tme>
+<tme_sfctrmer> </tme_sfctrmer>
+<tme_longcm> </tme_longcm>
+<tme_latprjo> </tme_latprjo>
+<tme_feast> </tme_feast>
+<tme_fnorth> </tme_fnorth>
+</tme>
+<anoth_proj_def>
+</anoth_proj_def>
+</mapprojn>
+<gridcoordinatessystem>
+<utm>
+<utm_zone></utm_zone>
+<utm_sfctrmer></utm_sfctrmer>
+<utm_longcm></utm_longcm>
+<utm_latprjo></utm_latprjo>
+<utm_feast></utm_feast>
+<utm_fnorth></utm_fnorth>
+</utm>
+</gridcoordinatessystem>
+<local_planar>
+<local_planar_desc></local_planar_desc>
+<local_planar_geo_inf></local_planar_geo_inf>
+</local_planar>
+<planci>
+<plance>Par coordenado.</plance>
+<coord_repres>
+<absres>0.00000001</absres>
+<ordres>0.00000001</ordres>
+</coord_repres>
+<distance_and_bearing_repres>
+<distance_res></distance_res>
+<bearing_res></bearing_res>
+<bearing_uni></bearing_uni>
+<ref_bearing_dir></ref_bearing_dir>
+<ref_bearing_mer></ref_bearing_mer>
+</distance_and_bearing_repres>
+<plandu>Metros.</plandu>
+</planci>
+</planar>
+<local_coordinates>
+<local_desc></local_desc>
+<local_geo_inf></local_geo_inf>
+</local_coordinates>
+<geodetic>
+<horizdn>ITRF08 época 2010.0.</horizdn>
+<ellips>Sistema Geodésico de Referencia de 1980 (GRS80).</ellips>
+<semiaxis>6378137.0</semiaxis>
+<denflat>298.2572221</denflat>
+</geodetic>
+</ReferenceHorizontalSystem>
+<ReferenceVerticalSystem>
+<altsys>
+<altdatum></altdatum>
+<altres></altres>
+<altunits></altunits>
+<altenc> </altenc>
+</altsys>
+<depthsys>
+<depthdn></depthdn>
+<depthres></depthres>
+<depthdu></depthdu>
+<depthem> </depthem>
+</depthsys>
+</ReferenceVerticalSystem>
+</MD_ReferenceSystem>
+<DQ_DataQuality>
+<DQ_Scope>
+<level>  5. Conjunto de datos espaciales: Información aplicada al conjunto de datos espaciales.</level>
+</DQ_Scope>
+<report>
+<DQ_Completeness>
+<DQ_Completeness_evalqualsubname>
+<DQ_Completeness_nameOfMeasure></DQ_Completeness_nameOfMeasure>
+<DQ_Completeness_measureDescription></DQ_Completeness_measureDescription>
+<DQ_Completeness_result>
+<DQ_Completeness_DQ_QuantitativeResult>
+<DQ_Completeness_valueUnit></DQ_Completeness_valueUnit>
+<DQ_Completeness_value></DQ_Completeness_value></DQ_Completeness_DQ_QuantitativeResult>
+</DQ_Completeness_result>
+</DQ_Completeness_evalqualsubname>
+</DQ_Completeness>
+<DQ_LogicConsistency>
+<DQ_LogicConsistency_evalqualsubname>
+<DQ_LogicConsistency_nameOfMeasure></DQ_LogicConsistency_nameOfMeasure>
+<DQ_LogicConsistency_measureDescription></DQ_LogicConsistency_measureDescription>
+<DQ_LogicConsistency_result>
+<DQ_LogicConsistency_DQ_QuantitativeResult>
+<DQ_LogicConsistency_valueUnit></DQ_LogicConsistency_valueUnit>
+<DQ_LogicConsistency_value></DQ_LogicConsistency_value></DQ_LogicConsistency_DQ_QuantitativeResult>
+</DQ_LogicConsistency_result>
+</DQ_LogicConsistency_evalqualsubname>
+</DQ_LogicConsistency>
+<PositionalAccuracy>
+<PositionalAccuracy_evalqualsubname>
+<PositionalAccuracy_nameOfMeasure></PositionalAccuracy_nameOfMeasure>
+<PositionalAccuracy_measureDescription></PositionalAccuracy_measureDescription>
+<PositionalAccuracy_result>
+<PositionalAccuracy_DQ_QuantitativeResult>
+<PositionalAccuracy_valueUnit></PositionalAccuracy_valueUnit>
+<PositionalAccuracy_value></PositionalAccuracy_value></PositionalAccuracy_DQ_QuantitativeResult>
+</PositionalAccuracy_result>
+</PositionalAccuracy_evalqualsubname>
+</PositionalAccuracy>
+<TemporalAccuracy>
+<TemporalAccuracy_evalqualsubname>
+<TemporalAccuracy_nameOfMeasure></TemporalAccuracy_nameOfMeasure>
+<TemporalAccuracy_measureDescription></TemporalAccuracy_measureDescription>
+<TemporalAccuracy_result>
+<TemporalAccuracy_DQ_QuantitativeResult>
+<TemporalAccuracy_valueUnit></TemporalAccuracy_valueUnit>
+<TemporalAccuracy_value></TemporalAccuracy_value></TemporalAccuracy_DQ_QuantitativeResult>
+</TemporalAccuracy_result>
+</TemporalAccuracy_evalqualsubname>
+</TemporalAccuracy>
+<ThematicAccuracy>
+<ThematicAccuracy_evalqualsubname>
+<ThematicAccuracy_nameOfMeasure></ThematicAccuracy_nameOfMeasure>
+<ThematicAccuracy_measureDescription></ThematicAccuracy_measureDescription>
+<ThematicAccuracy_result>
+<ThematicAccuracy_DQ_QuantitativeResult>
+<ThematicAccuracy_valueUnit></ThematicAccuracy_valueUnit>
+<ThematicAccuracy_value></ThematicAccuracy_value></ThematicAccuracy_DQ_QuantitativeResult>
+</ThematicAccuracy_result>
+</ThematicAccuracy_evalqualsubname>
+</ThematicAccuracy>
+</report>
+<LI_Lineage>
+<statement>Delimitación de colonias y otros asentamientos humanos 2025 (09-Ciudad de México), es un producto resultado del trabajo en conjunto del INEGI con autoridades municipales de cada estado de la República Mexicana.
+Desde el año 2020, el INEGI ha integrado las delimitaciones de colonias y otros asentamientos humanos a través de una labor de acercamiento con las autoridades competentes en la materia, solicitándoles el apoyo y colaboración para poder generar y actualizar la información a este nivel de desagregación.
+La base cartográfica utilizada corresponde a los Marcos Geoestadísticos: Marco Geoestadístico, septiembre 2019; Marco Geoestadístico, Censo de Población y Vivienda 2020; Marco Geoestadístico, diciembre 2021,Marco Geoestadístico, diciembre 2022, Marco Geoestadístico, diciembre 2023 y Marco Geoestadístico, agosto 2024. Esta información se registra en el conjunto de datos en el campo fecha de actualización del asentamiento humano, la cual muestra el año de la versión del Marco Geoestadístico que se tomó como base para la delimitación por parte de las autoridades municipales.
+Los archivos vectoriales se encuentran disponibles en formato SHAPE (SHP), el cual puede ser incorporado en sistemas de información geográfica (SIG).
+Históricamente la delimitación de asentamientos humanos surge de la necesidad de los municipios de formular, aprobar y administrar la zonificación de los centros de población ubicados en su territorio, y en ese sentido son responsables de identificar y delimitar las áreas y asentamientos humanos que los integran, por lo que esta delimitación, es generada, proporcionada y avalada por las autoridades municipales.
+En su definición, el asentamiento humano es el establecimiento de un conglomerado demográfico, con el conjunto de sus sistemas de convivencia, en un área físicamente localizada considerando dentro de la misma los elementos naturales y las obras materiales que lo integran. También es un componente de referencia del domicilio geográfico.
+La delimitación de asentamientos humanos se genera en ciclos anuales de producción, en los cuales se van incorporando las localidades con delimitación de asentamientos humanos entregadas por la autoridad municipal en función de las prioridades de las localidades; siendo la prioridad principal las localidades con 50,000 o más.
+Esta delimitación se plasma cartográficamente tomando como base las delimitaciones de Localidad y Manzana, así como la capa de Ejes de Vialidad procedentes del Marco Geoestadístico que genera el Instituto; las actualizaciones se integran en la capa vectorial denominada AS y los archivos digitales son entregados y depositados por las Direcciones Regionales a Oficinas Centrales del INEGI, así como los planos y oficios otorgados por el municipio que avalan dichas delimitaciones. Posteriormente en Oficinas Centrales se respalda la información, se realizan condensados por estado que comprenden las delimitaciones de los polígonos de asentamientos humanos de las localidades entregadas por los municipios, y, mediante procesos semiautomatizados, se revisa la información tabular y vectorial, dando como resultado un archivo shapefile integrado con las delimitaciones y actualización de asentamientos humanos que se reciben de las autoridades municipales, las cuales son utilizadas para la publicación.
+Cabe aclarar que la totalidad de la superficie de la localidad amanzanada no necesariamente es delimitada con los asentamientos humanos y viceversa, depende de la información que disponga la autoridad municipal. De igual forma, no se cuenta con una cobertura completa de localidades con delimitación de asentamientos humanos, y las temporalidades son distintas en función del año en que fue entregada la información por las autoridades municipales.
+</statement>
+<LI_ProcessStep>
+<LI_ProcessStep_description>1.- Prioridad de selección de localidades por delimitar sus asentamientos humanos
+El INEGI trabaja en conjunto con las autoridades municipales, para ello se seleccionan las localidades amanzanadas que serán objeto de delimitación o actualización en su capa de asentamientos humanos en función de las diferentes prioridades, considerando que la meta es contar con esta delimitación en la mayoría de las localidades amanzanadas, así como mantener actualizada la delimitación de asentamientos humanos en las localidades que han tenido mayor crecimiento. La prioridad de selección de las localidades amanzanadas es la siguiente:
+Prioridad 1, son las localidades con 50,000 habitantes o más y ciudades capitales.
+Prioridad 2, conglomerados de localidades contiguas.
+Prioridad 3, las localidades cabeceras municipales.
+Prioridad 4, el resto de las localidades urbanas.
+Prioridad 5, el resto de las localidades rurales amanzanadas.
+
+2.- Obtención y Digitalización de Asentamientos Humanos
+A las autoridades municipales se les proporcionan planos impresos de las localidades seleccionadas, incluyendo en ellos las manzanas, los ejes de calle y los polígonos de localidad procedentes del Marco Geoestadístico más actualizado, para que sirvan de guía en el trazo de los límites de asentamientos humanos.
+Se obtiene la delimitación, nombres y tipo de asentamientos humanos de la autoridad municipal, a través de planos impresos con el sello del municipio o archivos digitales. Estas delimitaciones son integradas en formato digital en las oficinas estatales del INEGI de acuerdo con un estándar establecido.
+
+3.- Integración del conjunto de datos vectoriales de la capa de asentamientos humanos
+Se integra un conjunto de datos de tipo vectorial con la delimitación de asentamientos humanos o capa de información denominada AS y se asignan claves a los nuevos polígonos de asentamientos humanos, permitiendo la identificación única por cada elemento. Las claves se conforman de la siguiente manera: EEMMMLLLLAAAA, donde EE, es la clave de la entidad federativa, MMM es la clave del municipio, LLLL es la clave de localidad y AAAA es la clave del asentamiento humano.
+
+Campo	        Descripción
+
+CVEGEO	Clave geoestadística
+CVE_ENT	Clave de entidad federativa
+CVE_MUN	Clave del municipio
+CVE_LOC	Clave de localidad
+CVE_ASEN	Clave de asentamiento humano
+CP	        Código postal
+FECHA_ACT	Fecha de actualización
+INSTITUCIO	Institución que da el vo.bo.
+NOM_ASEN	Nombre de asentamiento humano
+TIPO	        Tipo de asentamiento humano
+
+4.- Obtención del visto bueno de las autoridades.
+La información actualizada, se remite a las autoridades competentes para su revisión, ellos envían de regreso observaciones para ser corregidas o el vo.bo. que puede ser mediante oficio y/o sello del plano con la delimitación autorizada.
+
+5.- Generación de tablas de equivalencia.
+Para tener control sobre los cambios que sufren los asentamientos como altas, bajas y cambios, se generan tablas de equivalencia que reflejan la referencia anterior y actual de los asentamientos, así como el código de actualización correspondiente entre cada versión.
+
+6.- Validación topológica.
+La información se valida para garantizar la correspondencia, en el archivo digital, de la delimitación de los asentamientos humanos con los límites del Marco Geoestadístico y para la detección y justificación de las excepciones. (Ver sección Control de Calidad).
+
+Tecnología empleada:
+a)Software: Sistema de Información Geográfica con herramientas propias elaboradas para la edición y validación de la cartografía de Asentamientos Humanos, en Python 2.7 o superior, Arc Gis 10.8.1
+b)Hardware: Computadora Personal con Procesador Intel CORE a 3.6 ghz, Windows 8.1
+
+Control de calidad.
+Criterio: consistencia lógica.
+Subcriterio: consistencia topológica.
+Ámbito de la revisión: la capa de asentamientos humanos (AS).
+Tipo de Inspección: completa.
+Explicación de la revisión: Por medios semiautomatizados se verifica que los objetos espaciales cumplan con las reglas topológicas y con las relaciones lógicas (conexión, compartición).
+Se valida la capa de asentamientos humanos contra la capa de localidad geoestadística, polígono externo de localidad (PE) y polígono externo de manzana (PEM) que provienen del Marco Geoestadístico. Se realizan validaciones a partir de la base cartográfica del MG utilizada para la delimitación de asentamientos humanos, que considera, entre otras validaciones: cruces, huecos y traslapes y, en caso de existir alguna inconsistencia geométrica, se genera una capa de error en los geodatabases (gdb).
+Además, como parte de la revisión se realiza lo siguiente:
+-Validación de claves duplicadas de asentamientos humanos que se intersecan entre otro asentamiento
+humano o contra el polígono de localidad.
+-Delimitaciones con diferente clave de localidad en donde se encuentran físicamente.
+-Asentamientos fuera de la localidad.
+-Asentamientos que cruzan la localidad.
+-Huecos y traslapes de asentamientos humanos contra localidad.
+-Revisión tabular de tipos de asentamiento.
+Una vez que se tiene la capa AS de asentamientos humanos integrada a nivel nacional se revisa con la capa de Área Geoestadística Estatal (AGEE), Área Geoestadística Municipal (AGEM), localidad geoestadística y entre la misma capa AS para detectar intersecciones y consistencia de los atributos.
+Resultado: 2% de los objetos validados prevalece con inconsistencias, causadas por los huecos y traslapes entre rasgos geográficos. Sin embargo, existían excepciones por la variedad de casos que se presentan a nivel nacional, los cuales en la realidad del terreno son correctos. Estos casos no se corrigieron, sino que se justificaron. Se requirió la consulta y conciliación con las áreas involucradas (INEGI y gobiernos municipales) para la pronta solución de los problemas detectados, validando y estandarizando la información considerando las inconsistencias como excepciones aceptadas. 
+Nivel de conformidad de calidad: Se aplicó una tolerancia de error de 1 metro.
+Fecha o periodo de realización: Noviembre 2024-Octubre 2025.
+Evaluadores: Dirección General Adjunta de Información Geográfica para la Administración del Territorio -Departamento de Actualización del Marco Geoestadístico (INEGI).
+Observaciones: Es importante señalar que la delimitación de colonias y otros asentamientos humanos al ser una delimitación definida por la autoridad competente puede o no corresponder con las delimitaciones del Marco Geoestadístico, las cuales consideran en la medida de lo posible los límites político-administrativos.
+</LI_ProcessStep_description>
+</LI_ProcessStep>
+<LI_Source>
+<LI_Source_description>Fuente 1: MG_2024 (Marco Geoestadístico, agosto 2024).
+
+</LI_Source_description>
+</LI_Source>
+</LI_Lineage>
+</DQ_DataQuality>
+<Attributes>
+<schemaAscii>-Asentamiento humano (AS). Son polígonos que representan a las colonias de una localidad. Se encuentran dentro de un polígono de localidad. Contienen al conjunto de polígonos de manzanas correspondiente. Las líneas de los ejes de vialidad entre manzanas fueron la principal guía para su conformación, aunque también los límites de manzanas y localidad fueron considerados.
+
+Dominio de valores:
+	
+CVEGEO	Clave geoestadística.
+CVE_ENT	Clave de entidad federativa.
+CVE_MUN	Clave del municipio.
+CVE_LOC	Clave de localidad.
+CVE_ASEN	Clave de asentamiento humano.
+CP		Código postal.
+FECHA_ACT	Fecha actual.
+INSTITUCIO	Institución que da el vobo.
+NOM_ASEN	Nombre de asentamiento humano.
+TIPO		Tipo de asentamiento humano.
+</schemaAscii>
+<entity_detail>Capa base: as (Asentamiento) 1458.
+
+Información complementaria de distribución del total por tipos de asentamiento:
+Aeropuerto: 1, Barrio: 134, Colonia: 1240, Pueblo: 79, Zona Federal: 4.</entity_detail>
+</Attributes>
+<MD_Distribution>
+<accessConstraints>8. Acceso al público a través de internet y los Centros de Información del Instituto Nacional de Estadística y Geografía - INEGI.</accessConstraints>
+<useConstraints>8. Ninguna.</useConstraints>
+<otherConstraints>El Instituto Nacional de Estadística y Geografía - INEGI no se hace responsable del uso que se dé a los datos.</otherConstraints>
+<MD_Format>
+<name>archivos shape</name>
+<version> Arc Map 10.8 </version>
+</MD_Format>
+</MD_Distribution>
+<Inf_Metadata>
+<metadataStandardName>ISO 19115 Información Geográfica - Metadatos (Norma Técnica para Metadatos).</metadataStandardName>
+<metadataStandardVersion>2003 (1.0).</metadataStandardVersion>
+<Inf_Metadata_language>ES - Español.</Inf_Metadata_language>
+<CI_ResponsibleParty>
+<Inf_Metadata_CI_ResponsibleParty_individualName>Lic. Rafael Arrioja Urzúa.</Inf_Metadata_CI_ResponsibleParty_individualName>
+<Inf_Metadata_CI_ResponsibleParty_organisationName>Instituto Nacional de Estadística y Geografía - INEGI.</Inf_Metadata_CI_ResponsibleParty_organisationName>
+<Inf_Metadata_CI_ResponsibleParty_positionName>Jefe del Departamento de Administración de Metadatos.</Inf_Metadata_CI_ResponsibleParty_positionName>
+<Inf_Metadata_CI_ResponsibleParty_voice>449 910 5300. Extensiones 31 1750 y 31 5631.</Inf_Metadata_CI_ResponsibleParty_voice>
+<Inf_Metadata_CI_ResponsibleParty_facsimile></Inf_Metadata_CI_ResponsibleParty_facsimile>
+<Inf_Metadata_CI_ResponsibleParty_deliveryPoint>Avenida Héroe de Nacozari Sur 2301, Fraccionamiento Jardines del Parque, 20276, Aguascalientes, Aguascalientes, Aguascalientes, entre Calle INEGI, Avenida del Lago y Avenida Paseo de las Garzas. </Inf_Metadata_CI_ResponsibleParty_deliveryPoint>
+<Inf_Metadata_CI_ResponsibleParty_city>Aguascalientes.</Inf_Metadata_CI_ResponsibleParty_city>
+<Inf_Metadata_CI_ResponsibleParty_administrativeArea>Aguascalientes.</Inf_Metadata_CI_ResponsibleParty_administrativeArea>
+<Inf_Metadata_CI_ResponsibleParty_postalCode>20276</Inf_Metadata_CI_ResponsibleParty_postalCode>
+<Inf_Metadata_CI_ResponsibleParty_country>México.</Inf_Metadata_CI_ResponsibleParty_country>
+<Inf_Metadata_CI_ResponsibleParty_electronicMailAddress>rafael.arrioja@inegi.org.mx</Inf_Metadata_CI_ResponsibleParty_electronicMailAddress>
+<Inf_Metadata_CI_ResponsibleParty_role>  7. Punto de contacto: Parte que puede ser contactada para informarse sobre el recurso o adquisición del mismo.</Inf_Metadata_CI_ResponsibleParty_role>
+</CI_ResponsibleParty>
+<dateStamp>2025-11-13</dateStamp>
+<Inf_Metadata_characterSet>  4. Utf8: Formato de Transferencia UCS de tamaño variable de 8-bit, basado en ISO/IEC 10646.</Inf_Metadata_characterSet>
+</Inf_Metadata>
+</Metadata>

@@ -1,0 +1,259 @@
+CONTENIDO 
+ 
+El Instituto Nacional de Estadística y Geografía (INEGI), responsable de brindar el servicio público de información estadística y geográfica, presenta el producto Delimitación de colonias y otros asentamientos humanos 2025, es un producto resultado de un trabajo conjunto entre las autoridades municipales de los Estados de la República Mexicana y el Instituto Nacional de Estadística y Geografía (INEGI); conformado por archivos digitales en formato SHAPE, cuyo corte corresponde a la actualización cartográfica diciembre 2024 y está integrado por 32 carpetas y un nacional, cada una nombrada por la clave del área geoestadística estatal, con un total nacional de 79,775 polígonos de asentamientos humanos en 14,110 localidades (se anexa relación de localidades que cuentan con dicha delimitación) la información mantiene asociados como atributo, sus nombres y claves geoestadísticas. 
+ 
+Las delimitaciones de los asentamientos humanos, así como sus actualizaciones, se integran en la capa vectorial denominada AS en ciclos anuales de producción, en los cuales se van incorporando las localidades con delimitación de asentamientos humanos entregadas por la autoridad municipal. Es importante mencionar que no se cuenta con una cobertura completa de localidades con delimitación de asentamientos humanos y las temporalidades son distintas en función del año en que fue entregada la información por las autoridades municipales. 
+El producto Delimitación de colonias y otros asentamientos humanos 2025, se compone de 32 carpetas y en su interior de cada una 3 carpetas: 
+•
+ catálogos: contiene el catálogo y la documentación del producto. 
+
+•
+ conjunto_de_datos: contiene un archivo vectorial en formato SHAPE (SHP). 
+
+•
+ metadatos: contiene un archivo, con la clave geoestadística estatal correspondiente, en formato xml y txt, y un metadato genérico con información nacional. 
+
+
+ 
+Nombre y Contenido de los Archivos Vectoriales 
+ 
+Los asentamientos humanos se genera a partir de la información proporcionada y validada por las autoridades municipales, quienes tienen competencia en la materia. 
+ 
+Los archivos se encuentran organizados por Área Geoestadística Estatal y por capa, con base en la siguiente organización: ee\capa 
+Donde: 
+ee corresponde a la clave alfanumérica del Área Geoestadística Estatal: 01, 02…32 y la capa indica, con sufijo (as) el tipo de elemento contenido en cada archivo: 
+eeent Áreas Geoestadísticas Estatales 
+eas Asentamientos Humanos 
+Cabe aclarar que la capa con sufijo 00as, corresponde al archivo nacional de Asentamientos Humanos. 
+ 
+ 
+Formato 
+SHAPE 
+Documentación 
+ 
+El detalle de los elementos que conforman el producto Delimitación de colonias y otros asentamientos humanos 2025, se encuentra en el siguiente catálogo, en formatos pdf. y txt. 
+ 
+Y en formatos pdf y csv, el catálogo de: 
+*asentamientos_humanos 
+Asimismo, se complementa con el presente documento contenido, el cual puntualiza las características técnicas de la información, este archivo se encuentra en formato pdf y txt. 
+El producto también se acompaña del metadato que se integran al interior de las carpetas estatales y que contiene los archivos digitales con la información cartográfica. 
+ 
+Características técnicas de la información: 
+Parámetros: 
+Cónica Conforme de Lambert (CCL) Dátum: ITRF2008. 
+Elipsoide: GRS80. 
+Meridiano origen: -102° 00’ 00’’ W. 
+Latitud origen: 12° 00’ 00’’ N. 
+Primer paralelo estándar: 17° 30’ N. 
+Segundo paralelo estándar: 29° 30’ N. 
+Falso Este: 2 500 000. 
+Falso Norte: 0 
+ 
+Fuente 
+La base cartográfica utilizada corresponde a los Marcos Geoestadísticos: Marco Geoestadístico, septiembre 2019; Marco Geoestadístico, Censo de Población y Vivienda 2020, Marco Geoestadístico, diciembre 2021 y Marco Geoestadístico 2022 y Marco Geoestadístico, diciembre 2023, Marco Geoestadístico, septiembre 2024, el campo fecha de actualización del asentamiento humano muestra la fecha acorde con el Marco Geoestadístico correspondiente a la actualización. 
+Los archivos vectoriales se encuentran disponible en formato SHAPE (SHP), el cual pueden ser incorporado en sistemas de información geográfica (SIG). 
+El software utilizado para la digitalización de la cartografía y generación de los archivos SHAPE fue ArcGis en su versión 10.8.1 y se puede presentar hasta 1 metro de tolerancia entre los diversos elementos del archivo vectorial. 
+Para el mejor aprovechamiento de los datos, es importante que el software del usuario sea adecuado a las necesidades y a las especificaciones de equipo de cómputo que se deben cumplir, para la correcta visualización de la información. 
+Así mismo, por sus características, el producto Delimitación colonias y otros asentamientos humanos 2025 puede ser utilizado por los sectores público, privado y académico, entre otros. 
+Estructura eeas 
+CAMPO 
+ DESCRIPCION 
+ 
+
+CVEGEO 
+ Clave geoestadística 
+ 
+CVE_ENT 
+ Clave de entidad federativa 
+ 
+CVE_MUN 
+ Clave del municipio 
+ 
+CVE_LOC 
+ Clave de localidad 
+ 
+CVE_ASEN 
+ Clave de Asentamiento humano 
+ 
+CP 
+ Código postal 
+ 
+FECHA_ACT 
+ Fecha de actualización 
+ 
+INSTITUCIO 
+ Institución que da el vobo 
+ 
+NOM_ASEN 
+ Nombre de asentamiento humano 
+ 
+TIPO 
+ Tipo de asentamiento humano 
+ 
+
+
+ 
+Dadas las diferentes regiones del país, el tipo de asentamiento difiere con los indicados en la tabla, se ha de asignar por la institución que da el visto bueno, y si no se tiene identificado el mejor que se le identifique, se asigna el tipo Ninguno. 
+ 
+No se ha concretado un proceso de validación del Código Postal con Correos de México, por lo que estos valores pueden presentarse con valores ceros. 
+Se cuentan con 42 tipos de asentamientos y tiene un código. 
+ 
+ 
+
+
+
+ 
+
+CLAVE DE TIPO 
+ NOMBRE DE TIPO 
+ 
+1 
+ Aeropuerto 
+ 
+2 
+ Ampliación 
+ 
+3 
+ Barrio 
+ 
+4 
+ Cantón 
+ 
+5 
+ Ciudad 
+ 
+6 
+ Ciudad Industrial 
+ 
+7 
+ Colonia 
+ 
+8 
+ Condominio 
+ 
+9 
+ Conjunto Habitacional 
+ 
+10 
+ Corredor Industrial 
+ 
+11 
+ Coto 
+ 
+12 
+ Cuartel 
+ 
+13 
+ Ejido 
+ 
+14 
+ Exhacienda 
+ 
+15 
+ Fracción 
+ 
+16 
+ Fraccionamiento 
+ 
+17 
+ Granja 
+ 
+18 
+ Hacienda 
+ 
+19 
+ Ingenio 
+ 
+20 
+ Manzana 
+ 
+21 
+ Paraje 
+ 
+22 
+ Parque Industrial 
+ 
+23 
+ Privada 
+ 
+24 
+ Prolongación 
+ 
+25 
+ Pueblo 
+ 
+26 
+ Puerto 
+ 
+27 
+ Ranchería 
+ 
+28 
+ Rancho 
+ 
+29 
+ Región 
+ 
+30 
+ Residencial 
+ 
+31 
+ Rinconada 
+ 
+32 
+ Sección 
+ 
+33 
+ Sector 
+ 
+34 
+ Supermanzana 
+ 
+35 
+ Unidad 
+ 
+36 
+ Unidad Habitacional 
+ 
+37 
+ Villa 
+ 
+38 
+ Zona Federal 
+ 
+39 
+ Zona Industrial 
+ 
+40 
+ Zona Militar 
+ 
+41 
+ Ninguno 
+ 
+43 
+ Zona Naval 
+ 
+
+
+ 
+ 
+ 
+ 
+ 
+ 
+Porque proporcionamos información para todos... 
+¡México cuenta con el INEGI! 
+Queda prohibida la reproducción total o parcial de este producto con fines de lucro, por cualquier medio, ya sea impreso o electrónico. 
+ 
+Consecuentemente, la persona física o moral que sin autorización fotocopie, grabe, almacene en algún sistema o transmita a medios electrónicos o magnéticos dicha información, quedará sujeta a las disposiciones legales. 
+ 
+Instituto Nacional de Estadística y Geografía Edificio Sede 
+Av. Héroe de Nacozari Sur No. 2301 Fracc. Jardines del Parque, CP 20276 Aguascalientes, Aguascalientes, México. 
+ 
+www.inegi.org.mx atencion.usuarios@inegi.org.mx 
+Cualquier comentario, duda o aclaración respecto al producto, favor de dirigirse con: Mario Cruz González 
+Director General Adjunto de Información Geográfica para la Administración del Territorio mario.cruz@inegi.org.mx 
+ 
+ 
+Delimitación de Colonias y otros Asentamientos Humanos 2025. 
+

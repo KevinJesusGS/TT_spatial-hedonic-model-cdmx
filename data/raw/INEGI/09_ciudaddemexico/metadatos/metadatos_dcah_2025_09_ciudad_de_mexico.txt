@@ -1,0 +1,36 @@
+Title: Delimitación de colonias y otros asentamientos humanos 2025 (09-Ciudad de México).
+
+
+Descripción: La Delimitación de colonias y otros asentamientos humanos 2025 (09-Ciudad de México), es un producto resultado de un trabajo conjunto entre las autoridades municipales de los Estados de la República Mexicana y el Instituto Nacional de Estadística y Geografía (INEGI).
+
+Conforme a los artículos 115, fracción V, incisos a) y d) Constitucional, 11, fracción III y 59 de la Ley General de Asentamientos Humanos, Ordenamiento Territorial y Desarrollo Urbano (LGAHOTDU), corresponde a los Municipios formular, aprobar y administrar la Zonificación de los Centros de Población ubicados en su territorio, y en ese sentido, son responsables de identificar y delimitar las áreas y asentamientos humanos que los integran.
+
+Así, la conformación de la delimitación de asentamientos humanos se genera a partir de la información proporcionada y validada por las autoridades municipales, quienes tienen competencia en la materia. 
+
+Las delimitaciones de los asentamientos humanos, así como sus actualizaciones, se integran en la capa vectorial denominada as en ciclos anuales de producción, en los cuales se van incorporando las localidades con delimitación de asentamientos humanos entregadas por la autoridad municipal en función de las prioridades de las localidades; siendo la prioridad I aquellas mayores a 50,000 habitantes. Es importante mencionar que no se cuenta con una cobertura completa de localidades con delimitación de asentamientos humanos y las temporalidades son distintas en función del año en que fue entregada la información por las autoridades municipales. 
+
+Adicionalmente se considera que un Asentamiento Humano, es el establecimiento de un conglomerado demográfico, con el conjunto de sus sistemas de convivencia, en un área físicamente localizada, considerando dentro de la misma, los elementos naturales y las obras materiales que lo integran. También es un componente de referencia del Domicilio Geográfico.
+
+Modified: 2025-11-13
+
+
+Publisher: Instituto Nacional de Estadística y Geografía, INEGI.
+
+
+Mbox: atencion.usuarios@inegi.org.mx
+
+License: https://www.inegi.org.mx/inegi/terminos.html
+
+DataDictionary:
+
+Keyword: "asentamientos humanos".
+
+ContactPoint: Mtro. J. Armando Aguiar Rodríguez. Teléfono 449 910 53 00. Extensiones 31 5486 y 31 5920. Lada 800 111 4634.
+
+Temporal: 2024-01-01-2024-12-31 
+
+Spatial: Estados Unidos Mexicanos.
+
+AccrualPeriodicity: Anualmente.  
+
+Distribution: https://www.inegi.org.mx/app/mapas/?t=0
