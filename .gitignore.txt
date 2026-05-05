@@ -11,3 +11,5 @@ outputs/
 *.shx.xml
 *.aux
 *.lock
+
+data/raw/INEGI/iter_00_cpv2010.csv
