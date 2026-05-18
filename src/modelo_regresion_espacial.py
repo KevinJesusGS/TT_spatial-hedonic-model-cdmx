@@ -97,14 +97,15 @@ path_viviendas = os.path.join(DATA_PATH, "processed", "dataset_geocodificado.csv
 path_2010 = os.path.join(DATA_PATH, "raw", "INEGI", "inegi_2010.csv")
 path_2020 = os.path.join(DATA_PATH, "raw", "INEGI", "inegi_2020.csv")
 
-path_metro = os.path.join(DATA_PATH, "raw", "stcmetro_shp", "STC_Metro_lineas_utm14n.shp")
+path_metro = os.path.join(DATA_PATH, "raw", "stcmetro_shp", "STC_Metro_estaciones_utm14n.shp")
+path_metrobus = os.path.join(DATA_PATH, "raw", "mb_shp", "Metrobus_estaciones.shp")
 path_seguridad = os.path.join(DATA_PATH, "raw", "crimen", "urbanismo_social_sintesis.shp")
 path_comercio = os.path.join(DATA_PATH, "raw", "cypc", "C_PComerciales.shp")
 path_turistas = os.path.join(DATA_PATH, "raw", "Turistas", "turistas_alcaldia.csv")
 
-path_tren = os.path.join(DATA_PATH, "raw", "ste_shp", "ste_tren_ligero_shp", "ste_tren_ligero_shp", "STE_TrenLigero_linea_utm14n.shp")
+path_tren = os.path.join(DATA_PATH, "raw", "ste_shp", "ste_tren_ligero_shp", "ste_tren_ligero_shp", "STE_TrenLigero_estaciones_utm14n.shp")
 path_trole = os.path.join(DATA_PATH, "raw", "ste_shp", "ste_trolebus_shp", "ste_trolebus_shp", "STE_Trolebus_Paradas.shp")
-path_cable = os.path.join(DATA_PATH, "raw", "ste_shp", "ste_cablebus_shp", "ste_cablebus_shp", "STE_Cablebus_lineas.shp")
+path_cable = os.path.join(DATA_PATH, "raw", "ste_shp", "ste_cablebus_shp", "ste_cablebus_shp", "STE_Cablebus_estaciones.shp")
 
 path_alcaldias = os.path.join(DATA_PATH, "raw", "alcaldias", "poligonos_alcaldias_cdmx.shp")
 
@@ -114,6 +115,7 @@ path_alcaldias = os.path.join(DATA_PATH, "raw", "alcaldias", "poligonos_alcaldia
 path_ciclovias = os.path.join(DATA_PATH, "raw", "infraestructura_vial_ciclista", "Infraestructura ciclista total.shp")
 path_areas_verdes = os.path.join(DATA_PATH, "raw", "inventario_areas_verdes_1", "inventario_areas_verdes_1.shp")
 path_salud = os.path.join(DATA_PATH, "raw", "hospitales_y_centros_de_salud", "hospitales_y_centros_de_salud.shp")
+path_hospitales_publicos = os.path.join(DATA_PATH, "raw", "hospitales_2020_publicos", "hospitales_2020_publicos.shp")
 path_escuelas_pub = os.path.join(DATA_PATH, "raw", "escuelas_publicas", "escuelas_publicas.shp")
 path_escuelas_priv = os.path.join(DATA_PATH, "raw", "escuelas_privadas", "escuelas_privadas.shp")
 path_uso_suelo = os.path.join(DATA_PATH, "raw", "uso-de-suelo", "uso-de-suelo.shp")
@@ -361,6 +363,29 @@ cable_pts = line_to_points(cable, 100)
 df["dist_cable_m"] = nearest_distance(cable_pts, coords)
 df["density_cable"] = density_proxy(gdf_utm, cable_pts, 400)
 
+# --- NUEVO BLOQUE: METROBÚS (ESTACIONES) ---
+print("Procesando infraestructura de Metrobús...")
+if os.path.exists(path_metrobus):
+    mb_gdf = gpd.read_file(path_metrobus)
+    if mb_gdf.crs is None: 
+        mb_gdf = mb_gdf.set_crs("EPSG:4326")
+    mb_gdf = mb_gdf.to_crs(epsg=32614)
+    mb_gdf = mb_gdf[mb_gdf.geometry.notnull() & ~mb_gdf.geometry.is_empty]
+    
+    # Extraer puntos de las estaciones
+    mb_pts = np.array([(g.x, g.y) for g in mb_gdf.geometry if g.geom_type == "Point"])
+    
+    if len(mb_pts) > 0:
+        df["dist_metrobus_m"] = nearest_distance(mb_pts, coords)
+        df["density_metrobus"] = density_proxy(gdf_utm, mb_pts, 600) # Radio de 600m para estaciones
+        print(f"✓ Metrobús integrado ({len(mb_pts)} estaciones evaluadas)")
+    else:
+        df["dist_metrobus_m"] = 5000
+        df["density_metrobus"] = 0
+else:
+    df["dist_metrobus_m"] = 5000
+    df["density_metrobus"] = 0
+
 com = gpd.read_file(path_comercio).to_crs(epsg=32614)
 com_pts = np.array([(g.centroid.x, g.centroid.y) for g in com.geometry])
 df["comercio_density"] = density_proxy(gdf_utm, com_pts, 1500)
@@ -443,9 +468,12 @@ print("="*80)
 # Carga segura de cada capa
 ciclo = safe_load_geodata(path_ciclovias, "Ciclovías")
 verdes = safe_load_geodata(path_areas_verdes, "Áreas Verdes")
-salud = safe_load_geodata(path_salud, "Salud")
+salud_base = safe_load_geodata(path_salud, "Salud")
+salud_pub = safe_load_geodata(path_hospitales_publicos, "Hospitales Públicos 2020")
 esc_pub = safe_load_geodata(path_escuelas_pub, "Escuelas Públicas")
 esc_priv = safe_load_geodata(path_escuelas_priv, "Escuelas Privadas")
+
+salud_final_pts = []
 
 # --- PROCESAMIENTO DE PUNTOS ---
 # Solo calculamos si la carga fue exitosa
@@ -460,10 +488,54 @@ if verdes is not None:
     df["dist_area_verde_m"] = nearest_distance(verdes_pts, coords)
     df["densidad_parques_15m"] = density_proxy(gdf_utm, verdes_pts, 1200)
 
-if salud is not None:
-    salud_pts = np.array([(p.x, p.y) for p in salud.geometry])
+# Caso 1: Procesar la capa base si existe
+if salud_base is not None:
+    pts_base = np.array([(p.x, p.y) for p in salud_base.geometry])
+    if len(pts_base) > 0:
+        salud_final_pts.append(pts_base)
+
+# Caso 2: Filtrar por entidad (CDMX) y remover duplicados espaciales de la nueva capa
+if salud_pub is not None:
+    # Filtrar estrictamente los registros correspondientes a la CDMX ("09")
+    if "CLAVE_DE_L" in salud_pub.columns:
+        salud_pub = salud_pub[salud_pub["CLAVE_DE_L"] == "09"].copy()
+        print(f"✓ Hospitales Públicos filtrados para CDMX: {len(salud_pub)} registros")
+    
+    pts_pub = np.array([(p.x, p.y) for p in salud_pub.geometry])
+    
+    if len(pts_pub) > 0:
+        # Si ya tenemos puntos en la lista base, removemos duplicados coexistentes por proximidad
+        if len(salud_final_pts) > 0:
+            pts_existentes = np.vstack(salud_final_pts)
+            tree_existente = cKDTree(pts_existentes)
+            
+            # Consultamos si los nuevos puntos existen en un radio de 1 metro
+            # (Aproximación de coincidencia exacta de coordenadas)
+            indices_duplicados = tree_existente.query_ball_point(pts_pub, r=1.0)
+            
+            # Mantener solo los puntos cuyo conteo de vecinos sea 0 (sin coexistencia previa)
+            filtrados = [pts_pub[i] for i, vecinos in enumerate(indices_duplicados) if len(vecinos) == 0]
+            
+            if len(filtrados) > 0:
+                print(f"✓ Se añadieron {len(filtrados)} hospitales públicos únicos (se descartaron {len(pts_pub) - len(filtrados)} duplicados)")
+                salud_final_pts.append(np.array(filtrados))
+            else:
+                print("⚠ Todos los puntos de la nueva capa eran coexistentes o duplicados.")
+        else:
+            # Si la capa base falló por completo, usamos la nueva directo
+            salud_final_pts.append(pts_pub)
+
+# Consolidar los arrays resultantes e integrarlos al dataframe principal
+if salud_final_pts:
+    salud_pts = np.vstack(salud_final_pts)
     df["dist_salud_m"] = nearest_distance(salud_pts, coords)
     df["acceso_salud_15m"] = density_proxy(gdf_utm, salud_pts, 1200)
+    print(f"✓ Dataset unificado de salud listo. Total de nodos evaluados: {len(salud_pts)}")
+else:
+    # Fallback preventivo en caso de que ningún SHP se haya cargado con éxito
+    df["dist_salud_m"] = 5000
+    df["acceso_salud_15m"] = 0
+    print("⚠ No se pudo construir la infraestructura de salud. Asignando valores default.")
 
 # Para escuelas, combinamos solo si existen
 esc_list = []
@@ -567,45 +639,22 @@ df["listing_density_log"] = np.log1p(
 
 df["precio_vecinal_local"] = np.nan
 
-def min_subcenter_distance(row):
+subcentros_gdf = gpd.GeoDataFrame(
+    geometry=gpd.points_from_xy(
+        [lon for lat, lon in SUBCENTROS.values()],
+        [lat for lat, lon in SUBCENTROS.values()]
+    ),
+    crs="EPSG:4326"
+).to_crs(epsg=32614)
 
-    """
-    Calcula distancia mínima a subcentros urbanos policéntricos.
+sub_pts = np.array([(p.x, p.y) for p in subcentros_gdf.geometry])
 
-    La variable operacionaliza la teoría de estructura urbana
-    policéntrica, permitiendo medir accesibilidad relativa a
-    nodos secundarios de actividad económica.
+tree_sub = cKDTree(sub_pts)
 
-    Parámetros
-    ----------
-    row : Series
-        Registro individual de vivienda.
+dist_sub, _ = tree_sub.query(coords)
 
-    Retorna
-    -------
-    float
-        Distancia mínima al subcentro más cercano.
-    """
-
-    dists = []
-
-    for _, (lat, lon) in SUBCENTROS.items():
-        d = np.sqrt(
-            (row["latitud"] - lat)**2 +
-            (row["longitud"] - lon)**2
-        )
-        dists.append(d)
-
-    return min(dists)
-
-df["dist_nearest_subcenter"] = df.apply(
-    min_subcenter_distance,
-    axis=1
-)
-
-df["dist_subcenter_log"] = np.log1p(
-    df["dist_nearest_subcenter"]
-)
+df["dist_nearest_subcenter_m"] = dist_sub
+df["dist_subcenter_log"] = np.log1p(df["dist_nearest_subcenter_m"])
 
 # ======================================================
 # ÍNDICE ROBUSTO DE GENTRIFICACIÓN (PCA MULTIVARIADO)
@@ -685,13 +734,12 @@ df["area_x_marginalidad"] = np.log1p(df["area"]) * df["marginalidad_score"]
 df["area_X_gentrif"] = df["area"] * df["gentrification_index"]
 df["gentrif_x_metro"] = df["gentrification_index"] * df["density_metro"]
 
-# --- COLOCAR EN LA SECCIÓN 3/7 (FEATURES) ---
-
 # Nuevas interacciones que el modelo debe aprender
 df["15min_X_gentrif"] = df["score_15min"] * df["gentrification_index"]
 
 log_cols = [
     "dist_metro_m",
+    "dist_metrobus_m",
     "dist_tren_m",
     "dist_trole_m",
     "dist_cable_m",
@@ -732,7 +780,7 @@ for c in [
 features = [
     "rooms", "area", "bathrooms", "parking_spaces", "antiguedad", "dist_subcenter_log", 
     "marginalidad_score", "comercio_density",
-    "spatial_lag_price", "dist_metro_m", "density_metro", "dist_tren_m", 
+    "spatial_lag_price", "dist_metro_m", "density_metro", "dist_metrobus_m", "density_metrobus", "dist_tren_m", 
     "density_tren", "dist_trole_m", "density_trole", "dist_cable_m", 
     "density_cable", "total_turistas", "gentrification_index", 
     "lag_x_area", "area_x_marginalidad", 
@@ -2081,34 +2129,57 @@ print("="*80)
 # 1. Consolidar los dataframes de los dos mercados
 df_qgis = pd.concat([df_est, df_lux])
 
-# 2. Función de Gentrificación Local 
+# 2. Función de Gentrificación Local (Mejorada para Tesis)
 def calcular_gentrificacion_local(df_puntos):
     coords = df_puntos[['longitud', 'latitud']].values
-    
+
     # Buscamos los 20 vecinos más cercanos
-    nbrs = NearestNeighbors(n_neighbors=21, algorithm='ball_tree').fit(coords)
+    nbrs = NearestNeighbors(
+        n_neighbors=21,
+        algorithm='ball_tree'
+    ).fit(coords)
+
     distances, indices = nbrs.kneighbors(coords)
-    
+
     gentrif_local = []
+
     for i in range(len(df_puntos)):
-        # Excluimos el primer índice porque es el punto mismo (índice 0)
-        vecinos_idx = indices[i][1:] 
-        
+
+        # Excluimos el propio punto
+        vecinos_idx = indices[i][1:]
+
         precio_propio = df_puntos.iloc[i]['price_m2_raw']
-        precio_vecindario = df_puntos.iloc[vecinos_idx]['price_m2_raw'].mean()
-        
-        # Ratio de presión: valor > 1 indica que el punto es más caro que su entorno
+
+        precio_vecindario = (
+            df_puntos.iloc[vecinos_idx]['price_m2_raw']
+            .mean()
+        )
+
+        # Ratio relativo
         ratio = precio_propio / (precio_vecindario + 1e-5)
-        gentrif_local.append(ratio)
-        
+
+        # Limitar extremos para estabilidad
+        ratio = np.clip(ratio, 0, 5)
+
+        # Transformación estable 0-1
+        score = ratio / (1 + ratio)
+
+        gentrif_local.append(score)
+
     return gentrif_local
 
-# 3. Aplicar cálculo
-df_qgis['gentrif_local_presion'] = calcular_gentrificacion_local(df_qgis)
+
+# Aplicar cálculo
+df_qgis['gentrif_local_presion'] = (
+    calcular_gentrificacion_local(df_qgis)
+)
 
 # 4. Crear métrica combinada (Macro + Micro)
 # Esto une el índice de la alcaldía con la presión del punto específico
-df_qgis['gentrif_map_score'] = df_qgis['gentrification_index'] * df_qgis['gentrif_local_presion']
+df_qgis['gentrif_map_score'] = (
+    0.75 * df_qgis['gentrification_index']
+    + 0.25 * df_qgis['gentrif_local_presion']
+)
 
 # 5. Limpieza y formato final
 df_qgis["error_pct"] = ((df_qgis["precio_predicho"] - df_qgis["price"]) / df_qgis["price"]) * 100
@@ -2143,7 +2214,6 @@ plt.ylabel('Incremento de Precio (%)', fontsize=12)
 plt.savefig(os.path.join(FIGURES_PATH, "impacto_gentrificacion.png"))
 
 # 3. Comparativa de Importancia de Variables (Estandar vs Lujo)
-# Usando los datos de comp_coef que ya calculas en tu código
 top_10_diff = comp_coef.head(10)
 top_10_diff.plot(x='feature', y=['coef_estandar', 'coef_lujo'], kind='barh', figsize=(12, 8))
 plt.title('Diferencia de Pesos Hedónicos por Segmento de Mercado', fontsize=14)
