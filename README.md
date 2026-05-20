@@ -74,7 +74,7 @@ The `valuador_interactivo.py` dashboard leverages Streamlit to provide an intuit
 
 ## Key Outputs & Performance
 The execution of the pipeline generates and updates the following assets inside the `outputs/` directory:
-* **Appraisal Accuracy:** Real estate valuation predictions achieving an $R^2$ of **0.7325** and a Logarithmic RMSE of **0.3582**.
+* **Appraisal Accuracy:** Real estate valuation predictions achieving an $R^2$ of **0.7352** and a Logarithmic RMSE of **0.3566**.
 * **Spatial Segments:** Regional categorization maps powered by the K-Means algorithm.
 * **Gentrification Indices:** Multi-temporal socioeconomic change metrics scaled from 0 to 1.
 * **GIS Assets:** Vector data and processed shapefiles fully compatible with software like QGIS or ArcGIS.
