@@ -122,6 +122,15 @@ path_uso_suelo = os.path.join(DATA_PATH, "raw", "uso-de-suelo", "uso-de-suelo.sh
 
 carpeta_promedios = os.path.join(DATA_PATH, "raw", "Promedios")
 
+# ======================================================
+# CATASTRO CDMX 2021
+# ======================================================
+
+path_catastro = os.path.join(
+    DATA_PATH,
+    "raw",
+    "Catastrales"
+)
 
 # ======================================================
 # SUBCENTROS URBANOS CDMX (POLICENTRISMO)
@@ -167,6 +176,191 @@ def clean_text(txt):
     t = str(txt).lower().strip()
     t = t.translate(str.maketrans("áéíóú", "aeiou"))
     return t
+
+def cargar_catastro_completo(path_catastro):
+
+    """
+    Une atributos CSV + geometría SHP
+    mediante fid.
+    """
+
+    print("="*80)
+    print("CARGANDO CATASTRO COMPLETO")
+    print("="*80)
+
+    shp_files = glob.glob(
+        os.path.join(path_catastro, "*.shp")
+    )
+
+    frames = []
+
+    for shp in shp_files:
+
+        try:
+
+            nombre_base = (
+                os.path.splitext(
+                    os.path.basename(shp)
+                )[0]
+            )
+
+            csv_path = os.path.join(
+                path_catastro,
+                nombre_base + ".csv"
+            )
+
+            # ==================================
+            # LEER SHP
+            # ==================================
+
+            geo = gpd.read_file(
+                shp,
+                engine="fiona"
+            )
+
+            # ==================================
+            # LEER CSV
+            # ==================================
+
+            if not os.path.exists(csv_path):
+
+                print(
+                    f"⚠ CSV no encontrado: "
+                    f"{nombre_base}"
+                )
+
+                continue
+
+            attrs = pd.read_csv(
+                csv_path,
+                low_memory=False
+            )
+
+            # ==================================
+            # VALIDAR fid
+            # ==================================
+
+            if "fid" not in geo.columns:
+
+                print(
+                    f"⚠ SHP sin fid: "
+                    f"{nombre_base}"
+                )
+
+                continue
+
+            if "fid" not in attrs.columns:
+
+                print(
+                    f"⚠ CSV sin fid: "
+                    f"{nombre_base}"
+                )
+
+                continue
+            
+            # ==================================
+            # NORMALIZAR TIPOS fid
+            # ==================================
+
+            geo["fid"] = (
+                geo["fid"]
+                .astype(str)
+                .str.strip()
+            )
+
+            attrs["fid"] = (
+                attrs["fid"]
+                .astype(str)
+                .str.strip()
+            )
+
+            # Eliminar .0 típicos de floats
+            attrs["fid"] = (
+                attrs["fid"]
+                .str.replace(".0", "", regex=False)
+            )
+
+            geo["fid"] = (
+                geo["fid"]
+                .str.replace(".0", "", regex=False)
+            )
+
+            # ==================================
+            # MERGE
+            # ==================================
+
+            temp = geo.merge(
+                attrs,
+                on="fid",
+                how="left"
+            )
+
+            print(temp.columns.tolist())
+            # ==================================
+            # CRS
+            # ==================================
+
+            if temp.crs is None:
+                temp = temp.set_crs(
+                    "EPSG:4326"
+                )
+
+            temp = temp.to_crs(
+                epsg=32614
+            )
+
+            frames.append(temp)
+
+            print(
+                f"✓ {nombre_base} "
+                f"({len(temp)} polígonos)"
+            )
+
+        except Exception as e:
+
+            print(
+                f"⚠ Error: "
+                f"{nombre_base}: {e}"
+            )
+
+    if len(frames) == 0:
+
+        return gpd.GeoDataFrame()
+
+    catastro = pd.concat(
+        frames,
+        ignore_index=True
+    )
+
+    # ======================================
+    # NUMÉRICAS
+    # ======================================
+
+    cols_num = [
+
+        "sup_terreno",
+        "sup_construccion",
+        "anio_construccion",
+        "valor_unitario_suelo",
+        "valor_suelo"
+
+    ]
+
+    for c in cols_num:
+
+        if c in catastro.columns:
+
+            catastro[c] = pd.to_numeric(
+                catastro[c],
+                errors="coerce"
+            )
+
+    print(
+        f"\n✓ Catastro consolidado: "
+        f"{len(catastro)} polígonos"
+    )
+
+    return catastro
 
 def density_proxy(target_gdf, pts, r=1000):
     if len(pts) == 0: return np.zeros(len(target_gdf))
@@ -324,46 +518,399 @@ print("1/7 CARGA Y PROCESAMIENTO")
 print("="*80)
 
 df = pd.read_csv(path_viviendas)
+# ======================================================
+# CARGA CATASTRO
+# ======================================================
+
+catastro = cargar_catastro_completo(
+    path_catastro
+)
+
 df = df.dropna(subset=["latitud", "longitud", "price", "area", "alcaldia", "antiguedad"])
 df = df[df.area >= 20].copy()
+# ======================================================
+# NORMALIZACIÓN PARA MATCH CATASTRAL
+# ======================================================
 
 print("Registros iniciales:", len(df))
-
-# Validación espacial
-df = validar_y_relocalizar(df, path_alcaldias)
-
+# ======================================================
+# SPATIAL JOIN CATASTRAL
+# ======================================================
 gdf = gpd.GeoDataFrame(df, geometry=gpd.points_from_xy(df.longitud, df.latitud), crs="EPSG:4326")
 gdf_utm = gdf.to_crs(epsg=32614)
 coords = np.array([(p.x, p.y) for p in gdf_utm.geometry])
 
+if not catastro.empty:
+
+    print("="*80)
+    print("SPATIAL JOIN CATASTRAL")
+    print("="*80)
+
+    # ==========================================
+    # JOIN ESPACIAL POR VECINO MÁS CERCANO
+    # ==========================================
+
+    
+
+    print(
+        "✓ Spatial Join completado"
+    )
+
+    # =========================================================
+    # FEATURES ESPACIALES CATASTRALES
+    # =========================================================
+
+    print("="*80)
+    print("GENERANDO FEATURES ESPACIALES CATASTRALES")
+    print("="*80)
+
+    # =========================================================
+    # CENTROIDES CATASTRALES
+    # =========================================================
+
+    catastro_pts = catastro.copy()
+
+    catastro_pts["geometry"] = (
+        catastro_pts.geometry.centroid
+    )
+
+
+    catastro_pts = catastro_pts[
+
+        catastro_pts["valor_suelo"] > 0
+
+    ]
+
+    catastro_pts = catastro_pts[
+
+        catastro_pts["valor_unitario_suelo"] > 0
+
+    ]
+    # =========================================================
+    # VARIABLES AUXILIARES
+    # =========================================================
+
+    # -----------------------------------------
+    # Conversión numérica
+    # -----------------------------------------
+
+    cols_num = [
+
+        "sup_terreno",
+        "sup_construccion",
+        "anio_construccion",
+        "valor_unitario_suelo",
+        "valor_suelo"
+
+    ]
+
+    for c in cols_num:
+
+        catastro_pts[c] = pd.to_numeric(
+            catastro_pts[c],
+            errors="coerce"
+        )
+
+    # -----------------------------------------
+    # Ratio construcción
+    # -----------------------------------------
+
+    catastro_pts["ratio_construccion"] = np.where(
+
+        catastro_pts["sup_terreno"] > 0,
+
+        catastro_pts["sup_construccion"] /
+        catastro_pts["sup_terreno"],
+
+        np.nan
+    )
+
+  
+
+    # ==========================================
+    # CONVERSIÓN NUMÉRICA
+    # ==========================================
+
+    cols_num = [
+        "sup_terreno",
+        "sup_construccion",
+        "anio_construccion",
+        "valor_unitario_suelo",
+        "valor_suelo"
+    ]
+
+    for c in cols_num:
+
+        if c in catastro_pts.columns:
+
+            catastro_pts[c] = pd.to_numeric(
+                catastro_pts[c],
+                errors="coerce"
+            )
+
+    # ==========================================
+    # CREAR ANTIGÜEDAD
+    # ==========================================
+
+    catastro_pts["antiguedad"] = (
+        2025 -
+        catastro_pts["anio_construccion"]
+    )
+
+    # ==========================================
+    # LIMPIEZA
+    # ==========================================
+
+    catastro_pts = catastro_pts[
+        (catastro_pts["antiguedad"] >= 0) &
+        (catastro_pts["antiguedad"] <= 150)
+    ]
+
+    catastro_pts = catastro_pts[
+        catastro_pts["valor_suelo"] > 0
+    ]
+
+    catastro_pts = catastro_pts[
+        catastro_pts["valor_unitario_suelo"] > 0
+    ]
+
+    # =========================================================
+    # REDUCCIÓN DE COLUMNAS
+    # =========================================================
+
+    catastro_pts = catastro_pts[[
+
+        "geometry",
+        "valor_suelo",
+        "valor_unitario_suelo",
+        "ratio_construccion",
+        "antiguedad"
+
+    ]].copy()
+
+    # =========================================================
+    # SPATIAL INDEX
+    # =========================================================
+
+    sindex = catastro_pts.sindex
+
+    # =========================================================
+    # ARRAYS RESULTADO
+    # =========================================================
+
+    mean_valor_suelo = []
+    mean_vus = []
+    mean_antiguedad = []
+    std_valor_suelo = []
+    mean_ratio = []
+    density = []
+
+    # =========================================================
+    # RADIO
+    # =========================================================
+
+    radio = 200  # metros
+
+    catastro_pts = catastro_pts[[
+
+        "geometry",
+        "valor_suelo",
+        "valor_unitario_suelo",
+        "ratio_construccion",
+        "antiguedad"
+
+    ]].copy()
+    # =========================================================
+    # LOOP
+    # =========================================================
+
+    for geom in gdf_utm.geometry:
+
+        try:
+
+            # =============================================
+            # BUFFER
+            # =============================================
+
+            bounds = geom.buffer(radio).bounds
+
+            posibles = list(
+                sindex.intersection(bounds)
+            )
+
+            vecinos = catastro_pts.iloc[posibles]
+
+            vecinos = vecinos[
+                vecinos.geometry.distance(geom)
+                <= radio
+            ]
+
+            # =============================================
+            # SIN VECINOS
+            # =============================================
+
+            if len(vecinos) == 0:
+
+                mean_valor_suelo.append(np.nan)
+                mean_vus.append(np.nan)
+                mean_antiguedad.append(np.nan)
+                std_valor_suelo.append(np.nan)
+                mean_ratio.append(np.nan)
+                density.append(0)
+
+                continue
+
+            # =============================================
+            # FEATURES
+            # =============================================
+
+            mean_valor_suelo.append(
+                vecinos["valor_suelo"].mean()
+            )
+
+            mean_vus.append(
+                vecinos["valor_unitario_suelo"].mean()
+            )
+
+            mean_antiguedad.append(
+                vecinos["antiguedad"].mean()
+            )
+
+            std_valor_suelo.append(
+                vecinos["valor_suelo"].std()
+            )
+
+            mean_ratio.append(
+                vecinos["ratio_construccion"].mean()
+            )
+
+            density.append(
+                len(vecinos)
+            )
+
+        except:
+
+            mean_valor_suelo.append(np.nan)
+            mean_vus.append(np.nan)
+            mean_antiguedad.append(np.nan)
+            std_valor_suelo.append(np.nan)
+            mean_ratio.append(np.nan)
+            density.append(np.nan)
+
+    # =========================================================
+    # AGREGAR AL DATAFRAME
+    # =========================================================
+
+    df["cat_mean_valor_suelo_200m"] = (
+        mean_valor_suelo
+    )
+
+    df["cat_mean_vus_200m"] = (
+        mean_vus
+    )
+
+    df["cat_mean_antiguedad_200m"] = (
+        mean_antiguedad
+    )
+
+    df["cat_std_valor_suelo_200m"] = (
+        std_valor_suelo
+    )
+
+    df["cat_mean_ratio_construccion_200m"] = (
+        mean_ratio
+    )
+
+    df["cat_density_predios_200m"] = (
+        density
+    )
+
+    print("✓ Features espaciales catastrales generadas")
+    
+else:
+
+    print(
+        "⚠ Catastro no disponible"
+    )
+    # ======================================================
+# IMPUTACIÓN CATASTRAL
 # ======================================================
-# 2 GEOFEATURES
+
+cat_cols = [
+
+    "cat_mean_valor_suelo_200m",
+    "cat_mean_vus_200m",
+    "cat_mean_antiguedad_200m",
+    "cat_std_valor_suelo_200m",
+    "cat_mean_ratio_construccion_200m",
+    "cat_density_predios_200m"
+
+]
+
+
+for c in cat_cols:
+
+    if c in df.columns:
+
+        df[c] = df[c].fillna(
+            df[c].median()
+        )
+
+
+# Validación espacial
+df = validar_y_relocalizar(df, path_alcaldias)
+
+
+
+# ======================================================
+# 2 GEOFEATURES (CORREGIDO PARA CAPAS DE PUNTOS/ESTACIONES)
 # ======================================================
 print("="*80)
 print("2/7 GEOFEATURES")
 print("="*80)
 
+# --- METRO ---
 metro = gpd.read_file(path_metro).to_crs(epsg=32614)
-metro_pts = line_to_points(metro, 100)
+# Explotamos por si viene como MultiPoint y filtramos puntos válidos
+metro_exploded = metro.geometry.explode(index_parts=False)
+metro_pts = np.array([(g.x, g.y) for g in metro_exploded if g.geom_type == "Point"])
+
 df["dist_metro_m"] = nearest_distance(metro_pts, coords)
 df["density_metro"] = density_proxy(gdf_utm, metro_pts, 500)
+print(f"✓ Metro integrado ({len(metro_pts)} estaciones evaluadas)")
 
+
+# --- TREN LIGERO ---
 tren = gpd.read_file(path_tren).to_crs(epsg=32614)
-tren_pts = line_to_points(tren, 50)
+tren_exploded = tren.geometry.explode(index_parts=False)
+tren_pts = np.array([(g.x, g.y) for g in tren_exploded if g.geom_type == "Point"])
+
 df["dist_tren_m"] = nearest_distance(tren_pts, coords)
 df["density_tren"] = density_proxy(gdf_utm, tren_pts, 500)
+print(f"✓ Tren Ligero integrado ({len(tren_pts)} estaciones evaluadas)")
 
+
+# --- TROLEBÚS ---
 trole = gpd.read_file(path_trole).to_crs(epsg=32614)
-trole_pts = np.array([(g.x, g.y) for g in trole.geometry if g.geom_type == "Point"])
+trole_exploded = trole.geometry.explode(index_parts=False)
+trole_pts = np.array([(g.x, g.y) for g in trole_exploded if g.geom_type == "Point"])
+
 df["dist_trole_m"] = nearest_distance(trole_pts, coords)
 df["density_trole"] = density_proxy(gdf_utm, trole_pts, 300)
+print(f"✓ Trolebús integrado ({len(trole_pts)} paradas evaluadas)")
 
+
+# --- CABLEBÚS ---
 cable = gpd.read_file(path_cable).to_crs(epsg=32614)
-cable_pts = line_to_points(cable, 100)
+cable_exploded = cable.geometry.explode(index_parts=False)
+cable_pts = np.array([(g.x, g.y) for g in cable_exploded if g.geom_type == "Point"])
+
 df["dist_cable_m"] = nearest_distance(cable_pts, coords)
 df["density_cable"] = density_proxy(gdf_utm, cable_pts, 400)
+print(f"✓ Cablebús integrado ({len(cable_pts)} estaciones evaluadas)")
 
-# --- NUEVO BLOQUE: METROBÚS (ESTACIONES) ---
+
+# --- METROBÚS ---
 print("Procesando infraestructura de Metrobús...")
 if os.path.exists(path_metrobus):
     mb_gdf = gpd.read_file(path_metrobus)
@@ -372,12 +919,12 @@ if os.path.exists(path_metrobus):
     mb_gdf = mb_gdf.to_crs(epsg=32614)
     mb_gdf = mb_gdf[mb_gdf.geometry.notnull() & ~mb_gdf.geometry.is_empty]
     
-    # Extraer puntos de las estaciones
-    mb_pts = np.array([(g.x, g.y) for g in mb_gdf.geometry if g.geom_type == "Point"])
+    mb_exploded = mb_gdf.geometry.explode(index_parts=False)
+    mb_pts = np.array([(g.x, g.y) for g in mb_exploded if g.geom_type == "Point"])
     
     if len(mb_pts) > 0:
         df["dist_metrobus_m"] = nearest_distance(mb_pts, coords)
-        df["density_metrobus"] = density_proxy(gdf_utm, mb_pts, 600) # Radio de 600m para estaciones
+        df["density_metrobus"] = density_proxy(gdf_utm, mb_pts, 600)
         print(f"✓ Metrobús integrado ({len(mb_pts)} estaciones evaluadas)")
     else:
         df["dist_metrobus_m"] = 5000
@@ -396,18 +943,31 @@ df["marginalidad_score"] = pd.to_numeric(tmp["C_US"], errors="coerce").fillna(3)
 
 if os.path.exists(path_turistas):
     tur = pd.read_csv(path_turistas)
+    
+    # 1. Filtrar el total estatal (000 Ciudad de México) para evitar sesgos
+    tur = tur[~tur['Municipio'].astype(str).str.contains('000')]
+    
+    # 2. Limpiar el string eliminando el código numérico inicial del INEGI
+    tur['Municipio_limpio'] = tur['Municipio'].astype(str).str.replace(r'^\d{3}\s+', '', regex=True)
+    
+    # 3. Homologación con el helper clean_text 
     df["alc"] = df["alcaldia"].apply(clean_text)
-    tur["alc"] = tur.iloc[:, 0].apply(clean_text)
-    col = tur.columns[1]
-    tur[col] = tur[col].astype(str).str.replace(",", "").str.replace("$", "")
-    tur[col] = pd.to_numeric(tur[col], errors="coerce")
-    tur = tur.groupby("alc")[col].mean().reset_index()
-    tur.columns = ["alc", "total_turistas"]
+    tur["alc"] = tur["Municipio_limpio"].apply(clean_text)
+    
+    # 4. Procesar el porcentaje de migrantes/turistas a flotante continuo [0, 1]
+    col_interes = "Población_migrantes_porcentaje"
+    tur[col_interes] = tur[col_interes].astype(str).str.replace('%', '', regex=False)
+    tur[col_interes] = pd.to_numeric(tur[col_interes], errors="coerce") / 100.0
+    
+    # 5. Agrupar, renombrar y fusionar con el DataFrame maestro
+    tur = tur.groupby("alc")[col_interes].mean().reset_index()
+    tur.columns = ["alc", "pct_migrantes_turistas"]
+    
     df = df.merge(tur, on="alc", how="left")
-    df["total_turistas"] = df["total_turistas"].fillna(0)
-    print("[OK] Variable de intensidad turística incorporada")
+    df["pct_migrantes_turistas"] = df["pct_migrantes_turistas"].fillna(0)
+    print("✓ Variable de intensidad turística/migratoria (INEGI) incorporada con éxito")
 else:
-    df["total_turistas"] = 0
+    df["pct_migrantes_turistas"] = 0
 
 import pyogrio
 
@@ -442,7 +1002,7 @@ def safe_load_geodata(path, label, epsg=32614):
     """
 
     if not os.path.exists(path):
-        print(f"Omitiendo {label}: Archivo no encontrado en {path}")
+        print(f"⚠ Saltando {label}: Archivo no encontrado en {path}")
         return None
     try:
         # Cargamos el archivo
@@ -468,7 +1028,7 @@ print("="*80)
 # Carga segura de cada capa
 ciclo = safe_load_geodata(path_ciclovias, "Ciclovías")
 verdes = safe_load_geodata(path_areas_verdes, "Áreas Verdes")
-salud_base = safe_load_geodata(path_salud, "Salud")
+salud_base = safe_load_geodata(path_salud, "Salud Base")
 salud_pub = safe_load_geodata(path_hospitales_publicos, "Hospitales Públicos 2020")
 esc_pub = safe_load_geodata(path_escuelas_pub, "Escuelas Públicas")
 esc_priv = safe_load_geodata(path_escuelas_priv, "Escuelas Privadas")
@@ -590,40 +1150,65 @@ print("="*80)
 
 df["price_m2_raw"] = df["price"] / df["area"]
 
+urban_cols = [
+    "cat_mean_ratio_construccion_200m",
+    "cat_density_predios_200m",
+    "cat_mean_vus_200m",
+    "cat_std_valor_suelo_200m"
+]
+
+
+
+# ======================================================
+# VARIABLES DERIVADAS CATASTRALES
+# ======================================================
+
+if "cat_sup_construccion" in df.columns:
+
+    # Intensidad constructiva
+    df["cat_ratio_construccion"] = (
+        df["cat_sup_construccion"] /
+        (
+            df["cat_sup_terreno"] + 1
+        )
+    )
+
+    # Antigüedad real
+    df["cat_antiguedad"] = (
+        2026 -
+        df["cat_anio_construccion"]
+    )
+
+    # Valor fiscal m²
+    df["cat_valor_m2_suelo"] = (
+        df["cat_valor_suelo"] /
+        (
+            df["cat_sup_terreno"] + 1
+        )
+    )
+
+    # Transformaciones log
+    df["cat_valor_m2_suelo"] = np.log1p(
+        df["cat_valor_m2_suelo"]
+    )
+
+    df["cat_sup_terreno"] = np.log1p(
+        df["cat_sup_terreno"]
+    )
+
+    df["cat_sup_construccion"] = np.log1p(
+        df["cat_sup_construccion"]
+    )
+
+    print(
+        "✓ Features catastrales derivadas"
+    )
 
 def compute_local_listing_density(coords, radius=0.01):
-
-    """
-    Estima densidad espacial local de oferta inmobiliaria.
-
-    La métrica captura intensidad de concentración del mercado
-    mediante conteo de observaciones vecinas dentro de un radio
-    predefinido.
-
-    Esta variable funciona como aproximación a presión de mercado
-    y competencia espacial.
-
-    Parámetros
-    ----------
-    coords : ndarray
-        Coordenadas geográficas.
-    radius : float, optional
-        Radio de vecindad.
-
-    Retorna
-    -------
-    ndarray
-        Conteo local de propiedades vecinas.
-    """
-
+    """Estima densidad espacial local de oferta inmobiliaria."""
     tree = cKDTree(coords)
-
     neighbors = tree.query_ball_point(coords, r=radius)
-
-    density = np.array([
-        len(n) - 1 for n in neighbors
-    ])
-
+    density = np.array([len(n) - 1 for n in neighbors])
     return density
 
 coords_geo = df[["longitud", "latitud"]].values
@@ -633,12 +1218,10 @@ df["listing_density_local"] = compute_local_listing_density(
     radius=0.015
 )
 
-df["listing_density_log"] = np.log1p(
-    df["listing_density_local"]
-)
-
+df["listing_density_log"] = np.log1p(df["listing_density_local"])
 df["precio_vecinal_local"] = np.nan
 
+# Distancias a Subcentros Urbanos
 subcentros_gdf = gpd.GeoDataFrame(
     geometry=gpd.points_from_xy(
         [lon for lat, lon in SUBCENTROS.values()],
@@ -648,9 +1231,7 @@ subcentros_gdf = gpd.GeoDataFrame(
 ).to_crs(epsg=32614)
 
 sub_pts = np.array([(p.x, p.y) for p in subcentros_gdf.geometry])
-
 tree_sub = cKDTree(sub_pts)
-
 dist_sub, _ = tree_sub.query(coords)
 
 df["dist_nearest_subcenter_m"] = dist_sub
@@ -659,23 +1240,12 @@ df["dist_subcenter_log"] = np.log1p(df["dist_nearest_subcenter_m"])
 # ======================================================
 # ÍNDICE ROBUSTO DE GENTRIFICACIÓN (PCA MULTIVARIADO)
 # ======================================================
-
 print("Calculando índice robusto de gentrificación...")
-
 try:
     c10 = pd.read_csv(path_2010)
     c20 = pd.read_csv(path_2020)
 
-    vars_soc = [
-        "pct_educ_sup",   # escolaridad superior
-        "pct_internet",   # conectividad
-        "vph_pc",         # acceso digital
-        "vph_autom",      # motorización
-        "graproes",       # grado promedio escolar
-        "pea",            # población económicamente activa
-        "prom_ocup",      # ocupación por vivienda
-        "pder_ss"         # derechohabiencia
-    ]
+    vars_soc = ["pct_educ_sup", "pct_internet", "vph_pc", "vph_autom", "graproes", "pea", "prom_ocup", "pder_ss"]
 
     c10_g = c10.groupby("nom_mun")[vars_soc].mean().reset_index()
     c20_g = c20.groupby("nom_mun")[vars_soc].mean().reset_index()
@@ -689,31 +1259,14 @@ try:
         delta[f"d_{v}"] = delta[f"{v}_20"] - delta[f"{v}_10"]
 
     cols_delta = [f"d_{v}" for v in vars_soc]
-
-    X_pca = StandardScaler().fit_transform(
-        delta[cols_delta].fillna(0)
-    )
-
+    X_pca = StandardScaler().fit_transform(delta[cols_delta].fillna(0))
     gentrif = PCA(n_components=1).fit_transform(X_pca).flatten()
 
-    delta["gentrification_index"] = (
-        gentrif - gentrif.min()
-    ) / (
-        gentrif.max() - gentrif.min()
-    )
-
+    delta["gentrification_index"] = (gentrif - gentrif.min()) / (gentrif.max() - gentrif.min())
     delta["alc"] = delta["alc"].apply(clean_text)
 
-    df = df.merge(
-        delta[["alc", "gentrification_index"]],
-        on="alc",
-        how="left"
-    )
-
-    df["gentrification_index"] = df["gentrification_index"].fillna(
-        df["gentrification_index"].median()
-    )
-
+    df = df.merge(delta[["alc", "gentrification_index"]], on="alc", how="left")
+    df["gentrification_index"] = df["gentrification_index"].fillna(df["gentrification_index"].median())
     print("✓ Índice robusto calculado (8 variables + PCA)")
 
 except Exception as e:
@@ -722,99 +1275,88 @@ except Exception as e:
 
 print("Spatial lag será calculado dentro de cada fold (sin leakage)")
 df["spatial_lag_price"] = np.nan
-
+df["precio_vecinal_local"] = np.nan
+df["lag_x_area"] = np.nan
 lux_cut = df["price_m2_raw"].quantile(.90)
 df["is_luxury"] = (df["price_m2_raw"] >= lux_cut).astype(int)
 
-# Interacciones
-df["lag_x_area"] = df["spatial_lag_price"] * np.log1p(df["area"])
-
-df["area_x_marginalidad"] = np.log1p(df["area"]) * df["marginalidad_score"]
-
-df["area_X_gentrif"] = df["area"] * df["gentrification_index"]
-df["gentrif_x_metro"] = df["gentrification_index"] * df["density_metro"]
-
-# Nuevas interacciones que el modelo debe aprender
-df["15min_X_gentrif"] = df["score_15min"] * df["gentrification_index"]
-
+# ======================================================
+# TRANSFORMACIONES LOGARÍTMICAS PRIMARIAS
+# ======================================================
 log_cols = [
-    "dist_metro_m",
-    "dist_metrobus_m",
-    "dist_tren_m",
-    "dist_trole_m",
-    "dist_cable_m",
-    "dist_ciclovia_m",
-    "dist_area_verde_m",
-    "dist_salud_m",
-    "dist_escuela_m",
-    "comercio_density",
-    "total_turistas",
-    "antiguedad"
+    "dist_metro_m", "dist_metrobus_m", "dist_tren_m", "dist_trole_m", "dist_cable_m",
+    "dist_ciclovia_m", "dist_area_verde_m", "dist_salud_m", "dist_escuela_m",
+    "comercio_density", "pct_migrantes_turistas", "antiguedad"
 ]
 
 for c in log_cols:
     if c in df.columns:
         df[c] = np.log1p(df[c])
 
+# ======================================================
+# CÁLCULO DE INTERACCIONES Y RATIOS DERIVADOS (CORREGIDO)
+# (Solo variables estáticas; las dinámicas se mudan al K-Fold)
+# ======================================================
+# 1. Aseguramos que la marginalidad no tenga nulos residuales
+df["marginalidad_score"] = df["marginalidad_score"].fillna(3)
 
-df["verde_marginalidad_ratio"] = (
-    df["densidad_parques_15m"] /
-    (df["marginalidad_score"] + 1)
-)
+# 2. Interacciones Estáticas (Variables con datos ya existentes)
+df["area_x_marginalidad"] = np.log1p(df["area"]) * df["marginalidad_score"]
+df["area_X_gentrif"] = df["area"] * df["gentrification_index"]
+df["gentrif_x_metro"] = df["gentrification_index"] * df["density_metro"]
+df["15min_X_gentrif"] = df["score_15min"] * df["gentrification_index"]
 
-df["salud_marginalidad_ratio"] = (
-    df["acceso_salud_15m"] /
-    (df["marginalidad_score"] + 1)
-)
+# 3. Ratios de Equipamiento / Vulnerabilidad Social (Con Fallback Seguro)
+df["verde_marginalidad_ratio"] = 0.0
+if "densidad_parques_15m" in df.columns:
+    df["verde_marginalidad_ratio"] = np.log1p(df["densidad_parques_15m"] / (df["marginalidad_score"] + 1))
 
-df["educacion_marginalidad_ratio"] = (
-    df["acceso_educacion_15m"] /
-    (df["marginalidad_score"] + 1)
-)
-for c in [
-    "verde_marginalidad_ratio",
-    "salud_marginalidad_ratio",
-    "educacion_marginalidad_ratio"
-]:
-    df[c] = np.log1p(df[c])
-features = [
+df["salud_marginalidad_ratio"] = 0.0
+if "acceso_salud_15m" in df.columns:
+    df["salud_marginalidad_ratio"] = np.log1p(df["acceso_salud_15m"] / (df["marginalidad_score"] + 1))
+
+df["educacion_marginalidad_ratio"] = 0.0
+if "acceso_educacion_15m" in df.columns:
+    df["educacion_marginalidad_ratio"] = np.log1p(df["acceso_educacion_15m"] / (df["marginalidad_score"] + 1))
+
+
+# Vector unificado de entrenamiento (Features)
+static_features = [
     "rooms", "area", "bathrooms", "parking_spaces", "antiguedad", "dist_subcenter_log", 
-    "marginalidad_score", "comercio_density",
-    "spatial_lag_price", "dist_metro_m", "density_metro", "dist_metrobus_m", "density_metrobus", "dist_tren_m", 
-    "density_tren", "dist_trole_m", "density_trole", "dist_cable_m", 
-    "density_cable", "total_turistas", "gentrification_index", 
-    "lag_x_area", "area_x_marginalidad", 
-    "area_X_gentrif", "gentrif_x_metro"
+    "marginalidad_score", "comercio_density", "dist_metro_m", 
+    "density_metro", "dist_metrobus_m", "density_metrobus", "dist_tren_m", "density_tren", 
+    "dist_trole_m", "density_trole", "dist_cable_m", "density_cable", 
+    "pct_migrantes_turistas", "gentrification_index", "area_x_marginalidad", 
+    "area_X_gentrif", "gentrif_x_metro", "dist_ciclovia_m", "densidad_ciclovia_15m", 
+    "dist_area_verde_m", "densidad_parques_15m", "dist_salud_m", "acceso_salud_15m", 
+    "dist_escuela_m", "acceso_educacion_15m", "score_15min", "prox_ciclovia", 
+    "prox_parque", "prox_salud", "prox_escuela", "uso_mixto", "15min_X_gentrif", 
+    "listing_density_log", "verde_marginalidad_ratio", 
+    "salud_marginalidad_ratio", "educacion_marginalidad_ratio", 
+
+
+"cat_mean_valor_suelo_200m",
+"cat_mean_vus_200m",
+"cat_mean_antiguedad_200m",
+"cat_std_valor_suelo_200m",
+"cat_mean_ratio_construccion_200m",
+"cat_density_predios_200m"
 ]
 
-features += [
-    "dist_ciclovia_m", "densidad_ciclovia_15m", 
-    "dist_area_verde_m", "densidad_parques_15m",
-    "dist_salud_m", "acceso_salud_15m", 
-    "dist_escuela_m", "acceso_educacion_15m",
-    "score_15min", 
-    # Proximidades Transformadas (Estas son más potentes que las distancias puras)
-    "prox_ciclovia", "prox_parque", "prox_salud", "prox_escuela",
-    "uso_mixto",
-    # Interacciones clave
-    "15min_X_gentrif",
-    "listing_density_log",
+dynamic_features = [
+    "spatial_lag_price",
     "precio_vecinal_local",
-    "verde_marginalidad_ratio",
-    "salud_marginalidad_ratio",
-    "educacion_marginalidad_ratio"
+    "lag_x_area"
 ]
 
+features = static_features + dynamic_features
 
 print("\n" + "="*80)
 print("DEPURACIÓN AUTOMÁTICA DE FEATURES")
 print("="*80)
 
-# ----------------------------------------
-# Eliminación automática por alta correlación
-# ----------------------------------------
-
-corr_matrix = df[features].corr().abs()
+# El cálculo de correlación se hace de forma segura sobre datos existentes
+corr_matrix = df[static_features].corr().abs()
 
 upper = corr_matrix.where(
     np.triu(np.ones(corr_matrix.shape), k=1).astype(bool)
@@ -830,183 +1372,61 @@ if drop_cols:
     for c in drop_cols:
         print(f" - {c}")
 
+# Filtramos la lista de atributos intrínsecos
 features = [f for f in features if f not in drop_cols]
-
-print(f"\nFeatures finales: {len(features)}")
-
-print("\nLISTA FINAL:")
-for i, f in enumerate(features, 1):
-    print(f"{i}. {f}")
+print(f"Atributos intrínsecos finales: {len(features)}")
 
 
+# ==============================================================================
+# 2. FUNCIONES ESPACIALES CORREGIDAS (Garantizan salida como vectores limpios)
+# ==============================================================================
 def compute_spatial_lag(train_coords, train_prices, target_coords, k=10):
-    
-    """
-    Calcula rezago espacial ponderado por distancia inversa.
-
-    El rezago espacial aproxima externalidades locacionales y
-    dependencia espacial del mercado inmobiliario mediante una
-    media ponderada de precios vecinos.
-
-    La ponderación decrece con la distancia, reflejando el principio
-    de autocorrelación espacial.
-
-    Su cálculo se restringe al conjunto de entrenamiento para evitar
-    fuga de información.
-
-    Parámetros
-    ----------
-    train_coords : ndarray
-        Coordenadas de entrenamiento.
-    train_prices : ndarray
-        Valores observados.
-    target_coords : ndarray
-        Coordenadas objetivo.
-    k : int, optional
-        Número de vecinos considerados.
-
-    Retorna
-    -------
-    ndarray
-        Rezago espacial transformado logarítmicamente.
-    """
     tree = cKDTree(train_coords)
-
-    d, ix = tree.query(
-    target_coords,
-    k=min(k, len(train_coords))
-    )  
+    d, ix = tree.query(target_coords, k=min(k, len(train_coords)))  
 
     if k == 1:
         d = d.reshape(-1, 1)
         ix = ix.reshape(-1, 1)
 
     weights = 1 / (d + 1e-5)
-
     lag_values = []
 
     for idxs, w in zip(ix, weights):
-        lag_values.append(
-            np.average(train_prices[idxs], weights=w)
-        )
+        lag_values.append(np.average(train_prices[idxs], weights=w))
 
-    return np.log1p(lag_values)
+    return np.log1p(np.array(lag_values))
 
-def compute_local_neighbor_price(
-    train_coords,
-    train_prices,
-    target_coords,
-    k=15
-):
-    """
-    Estima precio promedio vecinal local.
 
-    Esta variable sintetiza condiciones microespaciales del entorno
-    inmediato y captura patrones de homogeneidad intrabarrial.
-
-    Constituye una aproximación al valor de referencia implícito
-    observado por proximidad.
-
-    Parámetros
-    ----------
-    train_coords : ndarray
-        Coordenadas de entrenamiento.
-    train_prices : ndarray
-        Precios observados.
-    target_coords : ndarray
-        Coordenadas objetivo.
-    k : int, optional
-        Número de vecinos.
-
-    Retorna
-    -------
-    ndarray
-        Precio promedio local.
-    """
-
-    nbrs = NearestNeighbors(
-        n_neighbors=min(k, len(train_coords))
-    ).fit(train_coords)
-
+def compute_local_neighbor_price(train_coords, train_prices, target_coords, k=15):
+    nbrs = NearestNeighbors(n_neighbors=min(k, len(train_coords))).fit(train_coords)
     _, indices = nbrs.kneighbors(target_coords)
+    return np.array([train_prices[idx].mean() for idx in indices])
 
-    return np.array([
-        train_prices[idx].mean()
-        for idx in indices
-    ])
 
-# ======================================================
-# 4 FUNCIONES DE MODELADO (K-MEANS + ELASTICNET)
-# ======================================================
+# ==============================================================================
+# 3. MODELO OPTIMIZADO CON COMPOSICIÓN DINÁMICA DE MATRICES
+# ==============================================================================
 def run_market_optimized(data, label):
-
-    """
-    Ejecuta ajuste segmentado del modelo ElasticNet espacial.
-
-    El procedimiento divide el mercado inmobiliario en submercados
-    homogéneos mediante clustering espacial y ajusta modelos
-    regularizados independientes.
-
-    Esta estrategia reconoce heterogeneidad estructural entre segmentos
-    de mercado y mejora capacidad predictiva.
-
-    La validación cruzada se realiza preservando integridad espacial
-    de variables derivadas.
-
-    Parámetros
-    ----------
-    data : DataFrame
-        Datos del segmento.
-    label : str
-        Identificador del submercado.
-
-    Retorna
-    -------
-    tuple
-        Valores reales, predicciones y dataframe enriquecido.
-    """
-
     print("\n" + "="*80)
     print(f"PROCESANDO ELASTICNET POR CLUSTERS: {label}")
     print("="*80)
 
+    # Filtrado de outliers local
     q_low, q_high = data["price_m2_raw"].quantile([0.05, 0.95])
-    data = data[
-        (data["price_m2_raw"] > q_low) &
-        (data["price_m2_raw"] < q_high)
-    ].copy()
+    data = data[(data["price_m2_raw"] > q_low) & (data["price_m2_raw"] < q_high)].copy()
 
-    coords_for_cluster = StandardScaler().fit_transform(
-        data[["latitud", "longitud"]]
-    )
+    coords_for_cluster = StandardScaler().fit_transform(data[["latitud", "longitud"]])
 
     if label == "MERCADO ESTÁNDAR":
-        data["cluster"] = KMeans(
-            n_clusters=3,
-            random_state=42,
-            n_init=10
-        ).fit_predict(coords_for_cluster)
-
+        data["cluster"] = KMeans(n_clusters=3, random_state=42, n_init=10).fit_predict(coords_for_cluster)
     else:
         enriched_cluster = StandardScaler().fit_transform(
-            data[[
-                "latitud",
-                "longitud",
-                "gentrification_index",
-                "score_15min"
-            ]]
+            data[["latitud", "longitud", "gentrification_index", "score_15min"]]
         )
-
-        data["cluster"] = KMeans(
-            n_clusters=3,
-            random_state=42,
-            n_init=10
-        ).fit_predict(enriched_cluster)
+        data["cluster"] = KMeans(n_clusters=3, random_state=42, n_init=10).fit_predict(enriched_cluster)
 
     data["precio_predicho"] = np.nan
-
-    global_real = []
-    global_pred = []
+    global_real, global_pred = [], []
 
     for c in sorted(data.cluster.unique()):
         d_cluster = data[data.cluster == c].copy()
@@ -1014,172 +1434,115 @@ def run_market_optimized(data, label):
         if len(d_cluster) < 100:
             continue
 
-        X_base = d_cluster[features].copy()
+        # Extraemos matriz exclusivamente con atributos intrínsecos limpios
+        X_base = d_cluster[static_features].copy()
         y = np.log1p(d_cluster["price_m2_raw"])
 
         areas = d_cluster["area"].values
         coords_cluster = d_cluster[["longitud", "latitud"]].values
 
-        kf = KFold(
-            n_splits=5,
-            shuffle=True,
-            random_state=42
-        )
+        kf = KFold(n_splits=5, shuffle=True, random_state=42)
+        c_real, c_pred = [], []
 
-        c_real = []
-        c_pred = []
-
-        for tr, te in kf.split(X_base):
-
-            # =====================================================
-            # Spatial lag SIN leakage
-            # =====================================================
-            lag_train = compute_spatial_lag(
-                coords_cluster[tr],
-                d_cluster.iloc[tr]["price_m2_raw"].values,
-                coords_cluster[tr]
-            )
-
-            lag_test = compute_spatial_lag(
-                coords_cluster[tr],
-                d_cluster.iloc[tr]["price_m2_raw"].values,
-                coords_cluster[te]
-            )
-
-            # =====================================================
-            # Precio vecinal local SIN leakage
-            # =====================================================
-            neighbor_price_train = compute_local_neighbor_price(
-                coords_cluster[tr],
-                d_cluster.iloc[tr]["price_m2_raw"].values,
-                coords_cluster[tr]
-            )
-
-            neighbor_price_test = compute_local_neighbor_price(
-                coords_cluster[tr],
-                d_cluster.iloc[tr]["price_m2_raw"].values,
-                coords_cluster[te]
-            )
-
+        for fold, (tr, te) in enumerate(kf.split(X_base)):
+            
+            # Segmentación limpia de variables base
             X_train = X_base.iloc[tr].copy()
             X_test = X_base.iloc[te].copy()
 
-            # Asignar variables espaciales
+            # Cálculos espaciales libres de Data Leakage
+            lag_train = compute_spatial_lag(coords_cluster[tr], d_cluster.iloc[tr]["price_m2_raw"].values, coords_cluster[tr])
+            lag_test = compute_spatial_lag(coords_cluster[tr], d_cluster.iloc[tr]["price_m2_raw"].values, coords_cluster[te])
+
+            neighbor_price_train = compute_local_neighbor_price(coords_cluster[tr], d_cluster.iloc[tr]["price_m2_raw"].values, coords_cluster[tr])
+            neighbor_price_test = compute_local_neighbor_price(coords_cluster[tr], d_cluster.iloc[tr]["price_m2_raw"].values, coords_cluster[te])
+
+            # ==================================================================
+            # LA CLAVE: Inyección dinámica en columnas totalmente nuevas de la copia
+            # Asignar arrays directos de NumPy evita problemas de desalineación por índices
+            # ==================================================================
             X_train["spatial_lag_price"] = lag_train
             X_test["spatial_lag_price"] = lag_test
 
             X_train["precio_vecinal_local"] = neighbor_price_train
             X_test["precio_vecinal_local"] = neighbor_price_test
 
-            # Recalcular interacciones dependientes
-            if "lag_x_area" in X_train.columns:
-                X_train["lag_x_area"] = (
-                    X_train["spatial_lag_price"] *
-                    np.log1p(X_train["area"])
-                )
+            X_train["lag_x_area"] = X_train["spatial_lag_price"] * np.log1p(X_train["area"])
+            X_test["lag_x_area"] = X_test["spatial_lag_price"] * np.log1p(X_test["area"])
 
-                X_test["lag_x_area"] = (
-                    X_test["spatial_lag_price"] *
-                    np.log1p(X_test["area"])
-                )
+            # ======================================================
+            # GUARDAR VARIABLES DINÁMICAS EN EL DATAFRAME GLOBAL
+            # ======================================================
 
-            # Manejo de NA
-            X_train = X_train.fillna(X_train.median())
-            X_test = X_test.fillna(X_train.median())
+            data.loc[d_cluster.iloc[tr].index, "spatial_lag_price"] = lag_train
+            data.loc[d_cluster.iloc[te].index, "spatial_lag_price"] = lag_test
 
+            data.loc[d_cluster.iloc[tr].index, "precio_vecinal_local"] = neighbor_price_train
+            data.loc[d_cluster.iloc[te].index, "precio_vecinal_local"] = neighbor_price_test
+
+            data.loc[d_cluster.iloc[tr].index, "lag_x_area"] = (
+                lag_train *
+                np.log1p(d_cluster.iloc[tr]["area"].values)
+            )
+
+            data.loc[d_cluster.iloc[te].index, "lag_x_area"] = (
+                lag_test *
+                np.log1p(d_cluster.iloc[te]["area"].values)
+            )
+            # Imputación de seguridad si existieran nulos en las variables intrínsecas
+            X_train = X_train.fillna(X_train.median()).fillna(0)
+            X_test = X_test.fillna(X_train.median()).fillna(0)
+
+            # Pipeline y Modelado
             model = Pipeline([
                 ("scaler", StandardScaler()),
-                ("enet", ElasticNetCV(
-                    alphas=np.logspace(-4, -1, 25),
-                    l1_ratio=[0.4, 0.6, 0.8],
-                    cv=5
-                ))
+                ("enet", ElasticNetCV(alphas=np.logspace(-4, -1, 25), l1_ratio=[0.4, 0.6, 0.8], cv=5))
             ])
 
             model.fit(X_train, y.iloc[tr])
 
-            pred_m2 = np.expm1(
-                model.predict(X_test)
-            )
-
+            pred_m2 = np.expm1(model.predict(X_test))
             pred_total = pred_m2 * areas[te]
 
-            idx_test = d_cluster.iloc[te].index
-
-            data.loc[idx_test, "precio_predicho"] = pred_total
+            data.loc[d_cluster.iloc[te].index, "precio_predicho"] = pred_total
 
             c_pred.extend(pred_total)
-            c_real.extend(
-                d_cluster["price"].iloc[te]
-            )
+            c_real.extend(d_cluster["price"].iloc[te])
 
-        print(
-            f"Cluster {c} | "
-            f"R²: {r2_score(c_real, c_pred):.4f}"
-        )
-
+        print(f"Cluster {c} | R²: {r2_score(c_real, c_pred):.4f}")
         global_real.extend(c_real)
         global_pred.extend(c_pred)
 
     return global_real, global_pred, data
 
-# ======================================================
-# 5 FUNCIÓN COMPARATIVA (k-NN)
-# ======================================================
+
+# ==============================================================================
+# 4. MODELO K-NN COMPARATIVO CORREGIDO
+# ==============================================================================
 def run_knn_comparison(data, label):
-
-    """
-    Ejecuta modelo de referencia basado en vecindad espacial.
-
-    Este procedimiento implementa un estimador no paramétrico
-    como línea base comparativa frente al modelo hedónico regularizado.
-
-    Su inclusión permite evaluar la ganancia explicativa derivada
-    de la incorporación estructurada de teoría urbana.
-
-    Parámetros
-    ----------
-    data : DataFrame
-        Segmento de mercado.
-    label : str
-        Nombre del segmento.
-
-    Retorna
-    -------
-    tuple
-        Métricas de desempeño y predicciones.
-    """
 
     print("\n" + "="*80)
     print(f"PROCESANDO COMPARATIVA k-NN: {label}")
     print("="*80)
 
-    q_low, q_high = data["price_m2_raw"].quantile([0.05, 0.95])
-    data = data[
-        (data["price_m2_raw"] > q_low) &
-        (data["price_m2_raw"] < q_high)
+    data_local = data.copy()
+
+    q_low, q_high = data_local["price_m2_raw"].quantile([0.05, 0.95])
+
+    data_local = data_local[
+        (data_local["price_m2_raw"] > q_low) &
+        (data_local["price_m2_raw"] < q_high)
     ].copy()
 
-    # ======================================
-    # Prevención de fuga de información (data leakage).
-    # Todas las variables espaciales dependientes de vecindad se recalculan
-    # exclusivamente con información del conjunto de entrenamiento para
-    # preservar validez inferencial.
-    # quitar precio_vecinal precomputado
-    # ======================================
-    knn_features = [
-        f for f in features
-        if f != "precio_vecinal_local"
-    ]
+    # SOLO FEATURES ESTÁTICAS
+    X = data_local[static_features].copy()
 
-    X = data[knn_features].copy()
-    y = np.log1p(data["price_m2_raw"])
-    areas = data["area"].values
-    coords = data[["longitud", "latitud"]].values
+    y = np.log1p(data_local["price_m2_raw"])
 
-    # ======================================
-    # BLOQUES ESPACIALES
-    # ======================================
+    areas = data_local["area"].values
+
+    coords = data_local[["longitud", "latitud"]].values
+
     spatial_blocks = KMeans(
         n_clusters=5,
         random_state=42,
@@ -1196,58 +1559,54 @@ def run_knn_comparison(data, label):
         X_train = X.iloc[tr].copy()
         X_test = X.iloc[te].copy()
 
-        # --------------------------------------
-        # Spatial lag sin leakage
-        # --------------------------------------
+        # SPATIAL LAG
         lag_train = compute_spatial_lag(
             coords[tr],
-            data.iloc[tr]["price_m2_raw"].values,
+            data_local.iloc[tr]["price_m2_raw"].values,
             coords[tr]
         )
 
         lag_test = compute_spatial_lag(
             coords[tr],
-            data.iloc[tr]["price_m2_raw"].values,
+            data_local.iloc[tr]["price_m2_raw"].values,
             coords[te]
         )
 
-        # --------------------------------------
-        # Precio vecinal sin leakage
-        # --------------------------------------
-        neighbor_train = compute_local_neighbor_price(
+        # PRECIO VECINAL
+        neighbor_price_train = compute_local_neighbor_price(
             coords[tr],
-            data.iloc[tr]["price_m2_raw"].values,
+            data_local.iloc[tr]["price_m2_raw"].values,
             coords[tr]
         )
 
-        neighbor_test = compute_local_neighbor_price(
+        neighbor_price_test = compute_local_neighbor_price(
             coords[tr],
-            data.iloc[tr]["price_m2_raw"].values,
+            data_local.iloc[tr]["price_m2_raw"].values,
             coords[te]
         )
 
-        if "spatial_lag_price" in X_train.columns:
-            X_train["spatial_lag_price"] = lag_train
-            X_test["spatial_lag_price"] = lag_test
+        # VARIABLES DINÁMICAS
+        X_train["spatial_lag_price"] = lag_train
+        X_test["spatial_lag_price"] = lag_test
 
-        X_train["precio_vecinal_local"] = neighbor_train
-        X_test["precio_vecinal_local"] = neighbor_test
+        X_train["precio_vecinal_local"] = neighbor_price_train
+        X_test["precio_vecinal_local"] = neighbor_price_test
 
-        if "lag_x_area" in X_train.columns:
-            X_train["lag_x_area"] = (
-                X_train["spatial_lag_price"] *
-                np.log1p(X_train["area"])
-            )
+        X_train["lag_x_area"] = (
+            X_train["spatial_lag_price"] *
+            np.log1p(X_train["area"])
+        )
 
-            X_test["lag_x_area"] = (
-                X_test["spatial_lag_price"] *
-                np.log1p(X_test["area"])
-            )
+        X_test["lag_x_area"] = (
+            X_test["spatial_lag_price"] *
+            np.log1p(X_test["area"])
+        )
 
-        # imputación robusta
-        X_train = X_train.fillna(X_train.median())
-        X_test = X_test.fillna(X_train.median())
+        # LIMPIEZA
+        X_train = X_train.fillna(X_train.median()).fillna(0)
+        X_test = X_test.fillna(X_train.median()).fillna(0)
 
+        # MODELO
         knn_model = Pipeline([
             ("scaler", StandardScaler()),
             ("knn", KNeighborsRegressor(
@@ -1262,18 +1621,19 @@ def run_knn_comparison(data, label):
             knn_model.predict(X_test)
         )
 
-        pred_total = pred_m2 * areas[te]
+        pred.extend(pred_m2 * areas[te])
 
-        pred.extend(pred_total)
-        real.extend(data["price"].iloc[te])
+        real.extend(
+            data_local["price"].iloc[te]
+        )
 
     r2 = r2_score(real, pred)
+
     mape = mean_absolute_percentage_error(real, pred)
 
     print(f"   k-NN -> R²: {r2:.4f} | MAPE: {mape:.2%}")
 
     return r2, mape, real, pred
-
 # ======================================================
 # EJECUCIÓN FINAL
 # ======================================================
@@ -1330,12 +1690,6 @@ ax.set_title(
 ax.set_xlabel("Precio Real", fontsize=12)
 ax.set_ylabel("Precio Predicho", fontsize=12)
 
-plt.savefig(
-    os.path.join(FIGURES_PATH, "elasticnet_real_vs_predicho.png"),
-    dpi=300,
-    bbox_inches="tight"
-)
-
 if MOSTRAR_GRAFICAS:
     plt.tight_layout()
     plt.show()
@@ -1360,12 +1714,6 @@ plt.title("Distribución del Error Porcentual (%)", fontsize=14)
 plt.xlabel("Error (%)")
 plt.xlim(-100, 100)
 plt.legend()
-
-plt.savefig(
-    os.path.join(FIGURES_PATH, "distribucion_error_elasticnet.png"),
-    dpi=300,
-    bbox_inches="tight"
-)
 
 if MOSTRAR_GRAFICAS:
     plt.tight_layout()
@@ -1405,7 +1753,7 @@ print("#"*80)
 # EJEMPLO DE INTERPRETABILIDAD HEDÓNICA
 # ======================================================
 print("\n" + "="*80)
-print("EJEMPLO DE INTERPRETABILIDAD HEDÓNICA")
+print("EJEMPLO DE INTERPRETABILIDAD HEDÓNICA (PARA LA TESIS)")
 print("="*80)
 print("""
 El modelo hedónico descompone el precio de la vivienda en sus atributos individuales. 
@@ -1440,6 +1788,7 @@ print("="*80)
 
 import glob
 
+carpeta_promedios = r"C:\Users\chuch\OneDrive\Escritorio\TT\Datos\Promedios"
 
 # ------------------------------------------------------
 # 1. CARGA DE DATOS 2022
@@ -1554,13 +1903,6 @@ plt.title("Ranking de Gentrificación por Alcaldía")
 plt.xlabel("Índice Normalizado")
 plt.ylabel("Alcaldía")
 plt.tight_layout()
-
-plt.savefig(
-    os.path.join(FIGURES_PATH, "ranking_gentrificacion.png"),
-    dpi=300,
-    bbox_inches="tight"
-)
-
 if MOSTRAR_GRAFICAS:
     plt.tight_layout()
     plt.show()
@@ -1591,13 +1933,6 @@ plt.title("Relación entre Gentrificación e Incremento de Precio")
 plt.xlabel("Índice de Gentrificación")
 plt.ylabel("Incremento % 2022-2025")
 plt.tight_layout()
-
-plt.savefig(
-    os.path.join(FIGURES_PATH, "impacto_gentrificacion.png"),
-    dpi=300,
-    bbox_inches="tight"
-)
-
 if MOSTRAR_GRAFICAS:
     plt.tight_layout()
     plt.show()
@@ -1638,20 +1973,12 @@ plt.title("Evolución Interna de Precios por Alcaldía")
 plt.xlabel("Precio promedio m² 2022")
 plt.ylabel("Precio promedio m² 2025")
 plt.tight_layout()
-
-plt.savefig(
-    os.path.join(FIGURES_PATH, "evolucion_precios_2022_2025.png"),
-    dpi=300,
-    bbox_inches="tight"
-)
-
 if MOSTRAR_GRAFICAS:
     plt.tight_layout()
     plt.show()
 else:
     print("\n[INFO] Modo silencioso: Gráficas omitidas. Cambia MOSTRAR_GRAFICAS a True para visualizarlas.")
     plt.close('all') # Cerramos las figuras en memoria para ahorrar RAM
-
 # ------------------------------------------------------
 # 9. GRÁFICA 4: INCREMENTO ORDENADO
 # ------------------------------------------------------
@@ -1674,13 +2001,6 @@ plt.barh(
 plt.title("Incremento % del Precio por m² (2022–2025)")
 plt.xlabel("Incremento (%)")
 plt.tight_layout()
-
-plt.savefig(
-    os.path.join(FIGURES_PATH, "incremento_precio_alcaldia.png"),
-    dpi=300,
-    bbox_inches="tight"
-)
-
 if MOSTRAR_GRAFICAS:
     plt.tight_layout()
     plt.show()
@@ -1760,12 +2080,11 @@ def fit_interpretable_elasticnet(data, label):
         data["price_m2_raw"].values,
         coords
     )
+    data["lag_x_area"] = (
+        data["spatial_lag_price"] *
+        np.log1p(data["area"])
+    )
 
-    if "lag_x_area" in data.columns:
-        data["lag_x_area"] = (
-            data["spatial_lag_price"] *
-            np.log1p(data["area"])
-        )
 
     # --------------------------------------------------
     # Dataset
@@ -1872,14 +2191,6 @@ def plot_coef(coef_df, titulo):
     plt.xlabel("Coeficiente ElasticNet")
     plt.gca().invert_yaxis()
     plt.tight_layout()
-
-    nombre_archivo = titulo.lower().replace(" ", "_") + ".png"
-
-    plt.savefig(
-        os.path.join(FIGURES_PATH, nombre_archivo),
-        dpi=300,
-        bbox_inches="tight"
-    )
     if MOSTRAR_GRAFICAS:
         plt.tight_layout()
         plt.show()
@@ -1943,6 +2254,7 @@ def interpret_feature_impact(coef_df, market_name):
 
 interpret_feature_impact(coef_est, "MERCADO ESTÁNDAR")
 interpret_feature_impact(coef_lux, "MERCADO LUJO")
+
 
 # ------------------------------------------------------
 # 4. SIMULADOR HEDÓNICO
