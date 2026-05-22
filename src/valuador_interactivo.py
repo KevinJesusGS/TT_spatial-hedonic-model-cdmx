@@ -34,6 +34,7 @@ import pandas as pd
 
 import geopandas as gpd
 from scipy.spatial import cKDTree
+from shapely.geometry import Point, LineString
 
 import streamlit as st
 import plotly.graph_objects as go
@@ -45,6 +46,9 @@ from sklearn.linear_model import ElasticNetCV
 from sklearn.neighbors import NearestNeighbors
 
 warnings.filterwarnings("ignore")
+
+import folium
+from streamlit_folium import st_folium
 
 # ============================================================
 # CONFIGURACIÓN DE LA INTERFAZ DE STREAMLIT
@@ -85,6 +89,11 @@ PATH_SALUD_BASE          = os.path.join(RAW_DATA_PATH, "hospitales_y_centros_de_
 PATH_HOSPITALES_PUBLICOS = os.path.join(RAW_DATA_PATH, "hospitales_2020_publicos",
                                         "hospitales_2020_publicos.shp")
 PATH_COMERCIO            = os.path.join(RAW_DATA_PATH, "cypc", "C_PComerciales.shp")
+PATH_ESCUELAS_PRIVADAS   = os.path.join(RAW_DATA_PATH, "escuelas_privadas", "escuelas_privadas.shp")
+PATH_ESCUELAS_PUBLICAS   = os.path.join(RAW_DATA_PATH, "escuelas_publicas", "escuelas_publicas.shp")
+
+# Ciclovías (líneas)
+PATH_CICLOVIAS = os.path.join(RAW_DATA_PATH, "infraestructura_vial_ciclista", "Infraestructura ciclista total.shp")
 
 # ============================================================
 # SUBCENTROS URBANOS — idénticos a modelo.py
@@ -101,7 +110,6 @@ SUBCENTROS = {
 # ============================================================
 # FEATURES — ALINEADAS CON modelo.py
 # ============================================================
-# Lista completa de static_features (antes del drop por colinealidad)
 _STATIC_FEATURES_FULL = [
     "rooms", "area", "bathrooms", "parking_spaces", "antiguedad",
     "dist_subcenter_log", "marginalidad_score", "comercio_density",
@@ -122,42 +130,50 @@ _STATIC_FEATURES_FULL = [
     "cat_mean_ratio_construccion_200m", "cat_density_predios_200m",
 ]
 
-# Variables dinámicas calculadas en el K-Fold de modelo.py
 _DYNAMIC_FEATURES = [
     "spatial_lag_price",
     "precio_vecinal_local",
     "lag_x_area",
 ]
 
-# Variables eliminadas por colinealidad (>0.90) reproduciendo el mismo
-# proceso que modelo.py ejecuta sobre el dataset de entrenamiento.
-# Se recalculan en preparar_sistema() con los datos reales del CSV.
-_COLINEAR_DROP = []   # Se llenará dinámicamente en preparar_sistema()
-
+_COLINEAR_DROP = []
 
 # ============================================================
 # HELPERS
 # ============================================================
 def clean_text(txt):
-    """Normaliza texto: minúsculas, sin acentos, sin espacios extra."""
     if pd.isna(txt):
         return np.nan
     txt = str(txt).lower().strip()
     txt = txt.translate(str.maketrans("áéíóúüñ", "aeiouun"))
     return txt
 
-
 def nearest_distance(pts, coords):
-    """Distancia euclidiana mínima (metros, EPSG:32614)."""
     if len(pts) == 0:
         return np.ones(len(coords)) * 5000
     tree = cKDTree(pts)
     d, _ = tree.query(coords)
     return d
 
+def line_to_points(gdf_line, interval_m=100):
+    """Convierte una capa de líneas a puntos espaciados cada interval_m (metros)."""
+    if gdf_line is None or gdf_line.empty:
+        return np.empty((0, 2))
+    puntos = []
+    for geom in gdf_line.geometry:
+        if geom is None or geom.is_empty:
+            continue
+        length = geom.length
+        if length == 0:
+            continue
+        num_points = max(2, int(length / interval_m) + 1)
+        distances = np.linspace(0, length, num_points)
+        for dist in distances:
+            pt = geom.interpolate(dist)
+            puntos.append((pt.x, pt.y))
+    return np.array(puntos)
 
 def compute_spatial_lag(train_coords, train_prices, target_coords, k=10):
-    """Spatial lag por distancia inversa — mismo algoritmo que modelo.py."""
     tree = cKDTree(train_coords)
     d, ix = tree.query(target_coords, k=min(k, len(train_coords)))
     if k == 1:
@@ -169,16 +185,13 @@ def compute_spatial_lag(train_coords, train_prices, target_coords, k=10):
         lag_values.append(np.average(train_prices[idxs], weights=w))
     return np.log1p(np.array(lag_values))
 
-
 def compute_local_neighbor_price(train_coords, train_prices,
                                  target_coords, k=15):
-    """Precio vecinal local — mismo algoritmo que modelo.py."""
     nbrs = NearestNeighbors(
         n_neighbors=min(k, len(train_coords))
     ).fit(train_coords)
     _, indices = nbrs.kneighbors(target_coords)
     return np.array([train_prices[idx].mean() for idx in indices])
-
 
 # ============================================================
 # SISTEMA PRINCIPAL (cacheado)
@@ -188,10 +201,8 @@ def preparar_sistema():
     """
     Carga el CSV exportado por modelo.py, replica el pipeline de features
     y entrena los modelos ElasticNet locales por segmento (estándar/lujo)
-    y por clúster, exactamente igual que modelo.py.
-
-    Las variables catastrales (cat_*) ya vienen calculadas en el CSV.
-    No se cargan shapefiles del catastro.
+    y por clúster.
+    Además carga capas de puntos y líneas (ciclovías) para visualización.
     """
 
     # ----------------------------------------------------------
@@ -209,9 +220,7 @@ def preparar_sistema():
     # ----------------------------------------------------------
     # 2. DETERMINAR STATIC_FEATURES (replicando drop por colinealidad)
     # ----------------------------------------------------------
-    # Verificar qué columnas están disponibles
     disponibles = [f for f in _STATIC_FEATURES_FULL if f in df.columns]
-
     corr_matrix = df[disponibles].corr().abs()
     upper = corr_matrix.where(
         np.triu(np.ones(corr_matrix.shape), k=1).astype(bool)
@@ -219,7 +228,6 @@ def preparar_sistema():
     drop_cols = [
         col for col in upper.columns if any(upper[col] > 0.90)
     ]
-
     static_features = [f for f in disponibles if f not in drop_cols]
     features_all    = static_features + _DYNAMIC_FEATURES
 
@@ -237,7 +245,7 @@ def preparar_sistema():
     coords_geo  = df[["longitud", "latitud"]].values
 
     # ----------------------------------------------------------
-    # 4. CRUCE ESPACIAL CON COLONIAS (para referencia_espacial)
+    # 4. CRUCE ESPACIAL CON COLONIAS
     # ----------------------------------------------------------
     colonias = gpd.read_file(PATH_COLONIAS)
     if colonias.crs != "EPSG:4326":
@@ -268,7 +276,6 @@ def preparar_sistema():
     df = df.dropna(subset=["colonia_real", "alcaldia_real"]).copy()
     df = df.reset_index(drop=True)
 
-    # Recalcular coords tras el drop de nulos
     gdf_utm2    = gpd.GeoDataFrame(
         df.copy(),
         geometry=gpd.points_from_xy(df["longitud"], df["latitud"]),
@@ -278,8 +285,7 @@ def preparar_sistema():
     coords_geo2 = df[["longitud", "latitud"]].values
 
     # ----------------------------------------------------------
-    # 5. RECALCULAR DIST A TRANSPORTE (para referencia_espacial actualizada)
-    #    Se usa la capa ya disponible — es rápido porque solo son puntos.
+    # 5. RECALCULAR DIST A TRANSPORTE
     # ----------------------------------------------------------
     def _get_pts(path):
         try:
@@ -332,17 +338,39 @@ def preparar_sistema():
         df["dist_comercio_m"] = 5000
 
     # ----------------------------------------------------------
-    # 6. SEGMENTACIÓN DE MERCADO — igual que modelo.py
-    #    is_luxury ya viene calculado en el CSV
+    # CICLOVÍAS (líneas y puntos para distancia/densidad)
+    # ----------------------------------------------------------
+    try:
+        _ciclo_raw = gpd.read_file(PATH_CICLOVIAS)
+        if _ciclo_raw.crs is None:
+            _ciclo_raw = _ciclo_raw.set_crs("EPSG:4326")
+        elif _ciclo_raw.crs.to_epsg() != 4326:
+            _ciclo_raw = _ciclo_raw.to_crs("EPSG:4326")
+        # WGS84 para Folium
+        ciclovias_wgs = _ciclo_raw[_ciclo_raw.geometry.notnull() & ~_ciclo_raw.geometry.is_empty].copy()
+        # UTM para cálculos de distancia/densidad
+        ciclovias_utm = ciclovias_wgs.to_crs("EPSG:32614")
+        ciclovias_pts = line_to_points(ciclovias_utm, interval_m=100)
+        df["dist_ciclovia_m"] = nearest_distance(ciclovias_pts, coords_utm2)
+        df["densidad_ciclovia_15m"] = density_proxy_from_points(coords_utm2, ciclovias_pts, radio=1200)
+    except Exception as e:
+        st.warning(f"No se pudo cargar el archivo de ciclovías: {e}")
+        ciclovias_wgs = gpd.GeoDataFrame(geometry=[], crs="EPSG:4326")
+        ciclovias_utm = gpd.GeoDataFrame(geometry=[], crs="EPSG:32614")
+        ciclovias_pts = np.empty((0, 2))
+        df["dist_ciclovia_m"] = 5000.0
+        df["densidad_ciclovia_15m"] = 0.0
+
+    # ----------------------------------------------------------
+    # 6. SEGMENTACIÓN DE MERCADO
     # ----------------------------------------------------------
     lux_cut = df["price_m2_raw"].quantile(0.90)
     df["is_luxury"] = (df["price_m2_raw"] >= lux_cut).astype(int)
 
     # ----------------------------------------------------------
-    # 7. ENTRENAMIENTO POR SEGMENTO (estándar/lujo) Y CLÚSTER
-    #    Replica run_market_optimized de modelo.py
+    # 7. ENTRENAMIENTO POR SEGMENTO Y CLÚSTER
     # ----------------------------------------------------------
-    modelos  = {}   # key: (segmento, cluster_id)
+    modelos  = {}
     imputers = {}
     kmeans_models    = {}
     cluster_scalers  = {}
@@ -352,7 +380,6 @@ def preparar_sistema():
                                  ("lujo",     df["is_luxury"] == 1)]:
 
         data_seg = df[seg_mask].copy()
-        # Filtro de outliers igual que modelo.py
         q_low, q_high = data_seg["price_m2_raw"].quantile([0.05, 0.95])
         data_seg = data_seg[
             (data_seg["price_m2_raw"] > q_low) &
@@ -362,7 +389,6 @@ def preparar_sistema():
         if len(data_seg) < 100:
             continue
 
-        # Cluster features — igual que modelo.py para cada segmento
         if seg_label == "estandar":
             cluster_feat = ["latitud", "longitud"]
             enriched = StandardScaler().fit_transform(
@@ -397,8 +423,6 @@ def preparar_sistema():
             X_base   = d_c[static_features].copy()
             y        = np.log1p(d_c["price_m2_raw"])
 
-            # Calcular variables dinámicas sobre todos los datos
-            # del clúster (sin K-Fold aquí: sirve para inferencia)
             lag   = compute_spatial_lag(
                 coords_c, d_c["price_m2_raw"].values, coords_c
             )
@@ -413,7 +437,6 @@ def preparar_sistema():
                 np.log1p(X_base["area"])
             )
 
-            # Aseguramos que features_all no incluya columnas ausentes
             feat_disponibles = [
                 f for f in features_all if f in X_base.columns
             ]
@@ -443,22 +466,21 @@ def preparar_sistema():
         [
             "latitud", "longitud",
             "gentrif_local_presion", "gentrif_map_score",
-            "dist_area_verde_m",         # distancia usada en modelo.py
+            "dist_area_verde_m",
             "dist_area_verde_recreativa_m",
             "dist_salud_m", "dist_escuela_m",
             "dist_metro_m", "dist_metrobus_m",
             "dist_tren_m", "dist_trole_m", "dist_cable_m",
             "dist_comercio_m",
+            "dist_ciclovia_m", "densidad_ciclovia_15m",
             "densidad_parques_15m", "acceso_salud_15m",
             "acceso_educacion_15m",
-            # Variables catastrales (para mostrar en interfaz)
             "cat_mean_valor_suelo_200m", "cat_mean_vus_200m",
             "cat_mean_antiguedad_200m",
             "cat_mean_ratio_construccion_200m",
             "cat_density_predios_200m",
         ]
     )
-    # Filtrar sólo columnas existentes
     cols_ref = list(dict.fromkeys(
         [c for c in cols_ref if c in df.columns]
     ))
@@ -483,13 +505,86 @@ def preparar_sistema():
     )
     alcaldias_disponibles = sorted(alcaldia_colonias.keys())
 
-    # Guardar precio_m2_raw por colonia para el spatial lag de inferencia
     price_m2_by_colonia = (
         df.groupby("colonia_real")["price_m2_raw"].mean().to_dict()
     )
     coords_by_colonia = (
         df.groupby("colonia_real")[["longitud", "latitud"]].mean().to_dict("index")
     )
+
+    # Polígonos de colonias
+    colonias_geo = colonias[["colonia_clean", "geometry"]].copy()
+    colonias_geo = colonias_geo[colonias_geo.geometry.notnull()].copy()
+    colonias_geo = colonias_geo.dissolve(by="colonia_clean").reset_index()
+    poligonos_colonias = {
+        row["colonia_clean"]: row["geometry"].__geo_interface__
+        for _, row in colonias_geo.iterrows()
+    }
+
+    # ----------------------------------------------------------
+    # 9. CARGA DE CAPAS DE PUNTOS PARA VISUALIZACIÓN
+    # ----------------------------------------------------------
+    def _cargar_capa_con_nombres(path, col_nombre, fallback_prefix):
+        try:
+            gdf = gpd.read_file(path)
+            if gdf.crs is None:
+                gdf = gdf.set_crs("EPSG:4326")
+            gdf = gdf.to_crs(epsg=32614)
+            gdf = gdf[gdf.geometry.notnull() & ~gdf.geometry.is_empty].copy()
+            gdf["geometry"] = gdf.geometry.centroid
+            nombres = []
+            for i, row in enumerate(gdf.itertuples()):
+                val = getattr(row, col_nombre, None) if col_nombre else None
+                if val and str(val).strip() not in ("", "nan", "None"):
+                    nombre = str(val).strip()
+                    if len(nombre) > 35:
+                        nombre = nombre[:33] + "…"
+                else:
+                    nombre = f"{fallback_prefix} #{i+1}"
+                nombres.append(nombre)
+            pts = np.array([(g.x, g.y) for g in gdf.geometry])
+            return pts, nombres
+        except Exception:
+            return np.empty((0, 2)), []
+
+    metro_pts,    metro_nombres    = _cargar_capa_con_nombres(PATH_METRO_EST,          "NOMBRE",    "Estación Metro")
+    mb_pts,       mb_nombres       = _cargar_capa_con_nombres(PATH_METROBUS_EST,        "NOMBRE",    "Estación Metrobús")
+    tren_pts,     tren_nombres     = _cargar_capa_con_nombres(PATH_TREN_EST,            "NOMBRE",    "Estación Tren Ligero")
+    trole_pts,    trole_nombres    = _cargar_capa_con_nombres(PATH_TROLE_PARADAS,       "NOMBRE",    "Parada Trolebús")
+    cable_pts,    cable_nombres    = _cargar_capa_con_nombres(PATH_CABLE_EST,           "NOMBRE",    "Estación Cablebús")
+    av_pts,       av_nombres       = _cargar_capa_con_nombres(PATH_AREAS_VERDES,        "nombre",    "Área Verde")
+    salud1_pts,   salud1_nombres   = _cargar_capa_con_nombres(PATH_SALUD_BASE,          "nombre",    "Unidad de Salud")
+    salud2_pts,   salud2_nombres   = _cargar_capa_con_nombres(PATH_HOSPITALES_PUBLICOS, "NOMBRE_D_3","Hospital")
+    com_pts,      com_nombres      = _cargar_capa_con_nombres(PATH_COMERCIO,            "INSTITUCIO","Centro Comercial")
+    esc_priv_pts, esc_priv_nombres = _cargar_capa_con_nombres(PATH_ESCUELAS_PRIVADAS,   "nombre",    "Escuela Privada")
+    esc_pub_pts,  esc_pub_nombres  = _cargar_capa_con_nombres(PATH_ESCUELAS_PUBLICAS,   "nombre",    "Escuela Pública")
+
+    if len(salud1_pts) and len(salud2_pts):
+        salud_pts     = np.vstack([salud1_pts, salud2_pts])
+        salud_nombres = salud1_nombres + salud2_nombres
+    elif len(salud1_pts):
+        salud_pts, salud_nombres = salud1_pts, salud1_nombres
+    else:
+        salud_pts, salud_nombres = salud2_pts, salud2_nombres
+
+    capas_servicios = {
+        "metro":       (metro_pts,    metro_nombres),
+        "metrobus":    (mb_pts,       mb_nombres),
+        "tren":        (tren_pts,     tren_nombres),
+        "trolebus":    (trole_pts,    trole_nombres),
+        "cablebus":    (cable_pts,    cable_nombres),
+        "parques":     (av_pts,       av_nombres),
+        "salud":       (salud_pts,    salud_nombres),
+        "comercio":    (com_pts,      com_nombres),
+        "esc_privada": (esc_priv_pts, esc_priv_nombres),
+        "esc_publica": (esc_pub_pts,  esc_pub_nombres),
+    }
+
+    # Capa de líneas (ciclovías)
+    capas_lineas = {
+        "ciclovias_utm": ciclovias_utm if 'ciclovias_utm' in locals() else gpd.GeoDataFrame(geometry=[], crs="EPSG:32614"),
+        "ciclovias_wgs": ciclovias_wgs if 'ciclovias_wgs' in locals() else gpd.GeoDataFrame(geometry=[], crs="EPSG:4326"),
+    }
 
     return (
         modelos, imputers,
@@ -498,8 +593,20 @@ def preparar_sistema():
         referencia_espacial, price_m2_col,
         alcaldias_disponibles, alcaldia_colonias,
         price_m2_by_colonia, coords_by_colonia,
+        capas_servicios, capas_lineas,
+        poligonos_colonias,
     )
 
+def density_proxy_from_points(coords_utm, pts, radio=1200):
+    """Conteo de puntos dentro del radio para cada coordenada."""
+    if len(pts) == 0:
+        return np.zeros(len(coords_utm))
+    tree = cKDTree(pts)
+    counts = []
+    for xy in coords_utm:
+        count = len(tree.query_ball_point(xy, r=radio))
+        counts.append(count)
+    return np.array(counts)
 
 # ============================================================
 # INSTANCIACIÓN
@@ -511,34 +618,25 @@ def preparar_sistema():
     REF_ESPACIAL, PRICE_M2_COL,
     ALCALDIAS_DISPONIBLES, ALCALDIA_COLONIAS,
     PRICE_M2_BY_COLONIA, COORDS_BY_COLONIA,
+    CAPAS_SERVICIOS, CAPAS_LINEAS,
+    POLIGONOS_COLONIAS,
 ) = preparar_sistema()
-
 
 # ============================================================
 # INFERENCIA
 # ============================================================
 def predict_price(area, rooms, baths, parking, ant, colonia):
-    """
-    Construye el vector de entrada combinando los parámetros del usuario
-    con el perfil urbano de la colonia, determina el segmento (lujo/estándar),
-    asigna el clúster y genera la predicción con el modelo correspondiente.
-    """
     datos_colonia = REF_ESPACIAL.get(
         colonia, list(REF_ESPACIAL.values())[0]
     )
 
-    # Determinar segmento por precio m² mediano de la colonia
     median_m2 = PRICE_M2_COL.get(colonia, 0)
-    precio_m2_raw_estimado = median_m2  # aproximación para clasificar
     lux_global_cut = np.percentile(
         list(PRICE_M2_COL.values()), 90
     )
-    seg_label = "lujo" if precio_m2_raw_estimado >= lux_global_cut else "estandar"
+    seg_label = "lujo" if median_m2 >= lux_global_cut else "estandar"
 
-    # --- Construir input ---
     input_data = datos_colonia.copy()
-
-    # Aplicar transformaciones log idénticas a modelo.py
     ant_log = np.log1p(ant)
 
     input_data.update({
@@ -547,7 +645,6 @@ def predict_price(area, rooms, baths, parking, ant, colonia):
         "bathrooms":      baths,
         "parking_spaces": parking,
         "antiguedad":     ant_log,
-        # Interacciones estáticas (modelo.py las precalcula con log de ant)
         "area_x_marginalidad": np.log1p(area) * datos_colonia.get("marginalidad_score", 3),
         "area_X_gentrif":      area * datos_colonia.get("gentrification_index", 0.5),
         "gentrif_x_metro":     datos_colonia.get("gentrification_index", 0.5) *
@@ -558,7 +655,6 @@ def predict_price(area, rooms, baths, parking, ant, colonia):
 
     X_df = pd.DataFrame([input_data])
 
-    # --- Asignar clúster ---
     cluster_feat = CLUSTER_FEAT_BY_SEG.get(seg_label, ["latitud", "longitud"])
     cscaler      = CLUSTER_SCALERS.get(seg_label)
     km           = KMEANS_MODELS.get(seg_label)
@@ -573,7 +669,6 @@ def predict_price(area, rooms, baths, parking, ant, colonia):
     c_id      = km.predict(cscaler.transform(X_cluster))[0]
 
     if (seg_label, c_id) not in MODELS:
-        # Fallback al primer modelo disponible del segmento
         candidates = [k for k in MODELS if k[0] == seg_label]
         if not candidates:
             candidates = list(MODELS.keys())
@@ -582,16 +677,7 @@ def predict_price(area, rooms, baths, parking, ant, colonia):
     model = MODELS[(seg_label, c_id)]
     imputador, feat_disponibles = IMPUTERS[(seg_label, c_id)]
 
-    # --- Variables dinámicas para inferencia ---
-    # Usamos el centroide de la colonia como punto de referencia
-    coord_colonia = np.array([
-        [datos_colonia.get("longitud", -99.13),
-         datos_colonia.get("latitud",   19.43)]
-    ])
-
-    # Precio m² vecinal promedio de la colonia como proxy
     pm2_colonia = PRICE_M2_COL.get(colonia, median_m2)
-    # Para el lag usamos el precio m² de la colonia misma
     X_df["spatial_lag_price"]   = np.log1p(pm2_colonia)
     X_df["precio_vecinal_local"] = pm2_colonia
     X_df["lag_x_area"] = (
@@ -604,52 +690,331 @@ def predict_price(area, rooms, baths, parking, ant, colonia):
         .fillna(0)
     )
 
-    log_pred = model.predict(X_pred)[0]
+    # Clip Z-scores a ±5σ para evitar precios absurdos por datos atípicos o colonias
+    # sin representación en entrenamiento con variables catastrales fuera de rango.
+    _scaler = model.named_steps["scaler"]
+    _Xz = np.clip(_scaler.transform(X_pred), -5, 5)
+    X_pred_safe = pd.DataFrame(_scaler.inverse_transform(_Xz),
+                               columns=X_pred.columns, index=X_pred.index)
+    log_pred = float(np.clip(model.predict(X_pred_safe)[0],
+                             np.log1p(200), np.log1p(200_000)))
     precio_m2_pred = np.expm1(log_pred)
     precio_total   = precio_m2_pred * area
 
-    # ------------------------------------------------------------------
-    # PRECIO BASE DEL SUBMERCADO (intercepto hedónico)
-    # Representa el precio de una vivienda "promedio" del clúster,
-    # sin ventajas ni penalizaciones de ninguna variable.
-    # Fórmula: expm1(intercepto_enet) * area
-    # El intercepto del ElasticNet opera en escala log y sobre datos
-    # estandarizados, por lo que ya incorpora la media del submercado.
-    # ------------------------------------------------------------------
     intercepto_log   = model.named_steps["enet"].intercept_
     precio_base_m2   = np.expm1(intercepto_log)
     precio_base_total = precio_base_m2 * area
 
     return (precio_total, precio_m2_pred, seg_label, c_id,
-            model, X_pred, datos_colonia, precio_base_total, precio_base_m2)
+            model, X_pred_safe, datos_colonia, precio_base_total, precio_base_m2)
 
+def recalcular_distancias_desde_punto(lat, lon):
+    """
+    Dado un punto (lat, lon) en WGS84, recalcula todas las distancias
+    a servicios usando los arrays de puntos ya cargados en CAPAS_SERVICIOS
+    y también a ciclovías (usando puntos a lo largo de las líneas).
+    """
+    from scipy.spatial import cKDTree
+
+    gdf_punto = gpd.GeoDataFrame(
+        geometry=gpd.points_from_xy([lon], [lat]), crs="EPSG:4326"
+    ).to_crs("EPSG:32614")
+    px, py = gdf_punto.geometry.iloc[0].x, gdf_punto.geometry.iloc[0].y
+    punto_utm = np.array([[px, py]])
+
+    def _dist_min(pts):
+        if len(pts) == 0:
+            return 5000.0
+        tree = cKDTree(pts)
+        d, _ = tree.query(punto_utm)
+        return float(d[0])
+
+    def _conteo_radio(pts, radio=1200):
+        if len(pts) == 0:
+            return 0
+        tree = cKDTree(pts)
+        return len(tree.query_ball_point([px, py], r=radio))
+
+    metro_pts,    _ = CAPAS_SERVICIOS["metro"]
+    mb_pts,       _ = CAPAS_SERVICIOS["metrobus"]
+    tren_pts,     _ = CAPAS_SERVICIOS["tren"]
+    trole_pts,    _ = CAPAS_SERVICIOS["trolebus"]
+    cable_pts,    _ = CAPAS_SERVICIOS["cablebus"]
+    av_pts,       _ = CAPAS_SERVICIOS["parques"]
+    salud_pts,    _ = CAPAS_SERVICIOS["salud"]
+    com_pts,      _ = CAPAS_SERVICIOS["comercio"]
+    esc_priv_pts, _ = CAPAS_SERVICIOS["esc_privada"]
+    esc_pub_pts,  _ = CAPAS_SERVICIOS["esc_publica"]
+
+    esc_todos = (
+        np.vstack([esc_priv_pts, esc_pub_pts])
+        if len(esc_priv_pts) and len(esc_pub_pts)
+        else (esc_priv_pts if len(esc_priv_pts) else esc_pub_pts)
+    )
+
+    # Ciclovías: generar puntos a lo largo de las líneas (cada 100 m) para distancia
+    ciclovias_utm = CAPAS_LINEAS.get("ciclovias_utm", gpd.GeoDataFrame(geometry=[], crs="EPSG:32614"))
+    if not ciclovias_utm.empty:
+        ciclovias_pts = line_to_points(ciclovias_utm, interval_m=100)
+    else:
+        ciclovias_pts = np.empty((0, 2))
+
+    d_metro   = _dist_min(metro_pts)
+    d_mb      = _dist_min(mb_pts)
+    d_tren    = _dist_min(tren_pts)
+    d_trole   = _dist_min(trole_pts)
+    d_cable   = _dist_min(cable_pts)
+    d_verde   = _dist_min(av_pts)
+    d_salud   = _dist_min(salud_pts)
+    d_escuela = _dist_min(esc_todos)
+    d_comercio = _dist_min(com_pts)
+    d_ciclovia = _dist_min(ciclovias_pts)
+
+    n_salud   = _conteo_radio(salud_pts)
+    n_escuela = _conteo_radio(esc_todos)
+    n_parques = _conteo_radio(av_pts)
+    n_ciclovia = _conteo_radio(ciclovias_pts)  # proxy de densidad
+
+    prox_parque = 1 if d_verde   <= 800  else 0
+    prox_salud  = 1 if d_salud   <= 1000 else 0
+    prox_escuela= 1 if d_escuela <= 1000 else 0
+    prox_ciclovia = 1 if d_ciclovia <= 500 else 0
+
+    score = np.mean([
+        min(n_salud   / 6,  1.0),
+        min(n_escuela / 40, 1.0),
+        min(n_parques / 10, 1.0),
+        prox_parque,
+        prox_salud,
+        prox_escuela,
+        prox_ciclovia,
+    ])
+
+    return {
+        "dist_metro_m":            d_metro,
+        "dist_metrobus_m":         d_mb,
+        "dist_tren_m":             d_tren,
+        "dist_trole_m":            d_trole,
+        "dist_cable_m":            d_cable,
+        "dist_area_verde_m":       d_verde,
+        "dist_area_verde_recreativa_m": d_verde,
+        "dist_salud_m":            d_salud,
+        "dist_escuela_m":          d_escuela,
+        "dist_comercio_m":         d_comercio,
+        "dist_ciclovia_m":         d_ciclovia,
+        "acceso_salud_15m":        float(n_salud),
+        "acceso_educacion_15m":    float(n_escuela),
+        "densidad_parques_15m":    float(n_parques),
+        "densidad_ciclovia_15m":   float(n_ciclovia),
+        "prox_parque":             float(prox_parque),
+        "prox_salud":              float(prox_salud),
+        "prox_escuela":            float(prox_escuela),
+        "prox_ciclovia":           float(prox_ciclovia),
+        "score_15min":             float(score),
+    }
+
+def predict_price_con_punto(area, rooms, baths, parking, ant, colonia, lat, lon):
+    datos_colonia = REF_ESPACIAL.get(colonia, list(REF_ESPACIAL.values())[0])
+
+    median_m2      = PRICE_M2_COL.get(colonia, 0)
+    lux_global_cut = np.percentile(list(PRICE_M2_COL.values()), 90)
+    seg_label      = "lujo" if median_m2 >= lux_global_cut else "estandar"
+
+    input_data = datos_colonia.copy()
+    ant_log    = np.log1p(ant)
+
+    distancias_nuevas = recalcular_distancias_desde_punto(lat, lon)
+    input_data.update(distancias_nuevas)
+
+    gentrif = datos_colonia.get("gentrification_index", 0.5)
+
+    # Recalcular density_metro desde la distancia real al nuevo punto
+    d_metro_nuevo = distancias_nuevas.get("dist_metro_m", 9999)
+    density_metro_nuevo = max(0.0, 1.0 - d_metro_nuevo / 1200.0) if d_metro_nuevo < 1200 else 0.0
+
+    input_data.update({
+        "area":            area,
+        "rooms":           rooms,
+        "bathrooms":       baths,
+        "parking_spaces":  parking,
+        "antiguedad":      ant_log,
+        # Coordenadas reales del punto (no del centroide) para clúster
+        "latitud":         lat,
+        "longitud":        lon,
+        "area_x_marginalidad": np.log1p(area) * datos_colonia.get("marginalidad_score", 3),
+        "area_X_gentrif":      area * gentrif,
+        "gentrif_x_metro":     gentrif * density_metro_nuevo,
+        "15min_X_gentrif":     distancias_nuevas["score_15min"] * gentrif,
+    })
+
+    X_df = pd.DataFrame([input_data])
+
+    cluster_feat = CLUSTER_FEAT_BY_SEG.get(seg_label, ["latitud", "longitud"])
+    cscaler      = CLUSTER_SCALERS.get(seg_label)
+    km           = KMEANS_MODELS.get(seg_label)
+
+    if cscaler is None or km is None:
+        seg_label    = list({k[0] for k in MODELS.keys()})[0]
+        cluster_feat = CLUSTER_FEAT_BY_SEG[seg_label]
+        cscaler      = CLUSTER_SCALERS[seg_label]
+        km           = KMEANS_MODELS[seg_label]
+
+    X_cluster = X_df[cluster_feat].fillna(0)
+    c_id      = km.predict(cscaler.transform(X_cluster))[0]
+
+    if (seg_label, c_id) not in MODELS:
+        candidates     = [k for k in MODELS if k[0] == seg_label] or list(MODELS.keys())
+        seg_label, c_id = candidates[0]
+
+    model                   = MODELS[(seg_label, c_id)]
+    imputador, feat_disp    = IMPUTERS[(seg_label, c_id)]
+
+    pm2_colonia = PRICE_M2_COL.get(colonia, median_m2)
+
+    # Spatial lag real: precio ponderado por distancia a colonias vecinas.
+    # IMPORTANTE: convertir coords a UTM (metros) antes de calcular distancias
+    # para evitar pesos inflados al usar grados decimales (~0.001) que generan
+    # precios absurdos (billones de MXN).
+    _col_lons = np.array([v.get("longitud", lon) for v in REF_ESPACIAL.values()])
+    _col_lats = np.array([v.get("latitud",  lat) for v in REF_ESPACIAL.values()])
+    _col_prices = np.array([
+        PRICE_M2_BY_COLONIA.get(k, pm2_colonia)
+        for k in REF_ESPACIAL.keys()
+    ])
+
+    if len(_col_lons) >= 5:
+        from scipy.spatial import cKDTree as _cKDT
+        # Proyectar colonias a UTM para calcular distancias en metros
+        _gdf_cols = gpd.GeoDataFrame(
+            geometry=gpd.points_from_xy(_col_lons, _col_lats), crs="EPSG:4326"
+        ).to_crs("EPSG:32614")
+        _col_coords_utm = np.array([(g.x, g.y) for g in _gdf_cols.geometry])
+
+        # Proyectar el punto objetivo a UTM
+        _gdf_pt = gpd.GeoDataFrame(
+            geometry=gpd.points_from_xy([lon], [lat]), crs="EPSG:4326"
+        ).to_crs("EPSG:32614")
+        _px_utm = _gdf_pt.geometry.iloc[0].x
+        _py_utm = _gdf_pt.geometry.iloc[0].y
+
+        _tree_col = _cKDT(_col_coords_utm)
+        _k_lag = min(10, len(_col_coords_utm))
+        _d_lag, _ix_lag = _tree_col.query([[_px_utm, _py_utm]], k=_k_lag)
+
+        # Distancias en metros → pesos inversos razonables
+        _w_lag = 1.0 / (_d_lag[0] + 1.0)   # +1 metro evita división por cero
+        _spatial_lag_raw = float(np.average(_col_prices[_ix_lag[0]], weights=_w_lag))
+    else:
+        _spatial_lag_raw = pm2_colonia
+
+    # Sanitizar: el lag no debe alejarse más de 10× del precio mediano de la colonia
+    # para atrapar cualquier valor corrupto remanente.
+    _p_ref = pm2_colonia if pm2_colonia > 0 else float(np.median(list(PRICE_M2_COL.values())))
+    _spatial_lag_raw = float(np.clip(_spatial_lag_raw, _p_ref * 0.1, _p_ref * 10.0))
+
+    X_df["spatial_lag_price"]    = np.log1p(_spatial_lag_raw)
+    X_df["precio_vecinal_local"] = _spatial_lag_raw
+    X_df["lag_x_area"]           = X_df["spatial_lag_price"] * np.log1p(area)
+
+    X_pred         = X_df[feat_disp].fillna(imputador).fillna(0)
+
+    # Clip Z-scores a ±5σ para evitar precios absurdos por datos atípicos o nueva ubicación
+    _scaler2 = model.named_steps["scaler"]
+    _Xz2 = np.clip(_scaler2.transform(X_pred), -5, 5)
+    X_pred_safe = pd.DataFrame(_scaler2.inverse_transform(_Xz2),
+                               columns=X_pred.columns, index=X_pred.index)
+    log_pred       = float(np.clip(model.predict(X_pred_safe)[0],
+                                   np.log1p(200), np.log1p(200_000)))
+    precio_m2_pred = np.expm1(log_pred)
+    precio_total   = precio_m2_pred * area
+
+    intercepto_log    = model.named_steps["enet"].intercept_
+    precio_base_m2    = np.expm1(intercepto_log)
+    precio_base_total = precio_base_m2 * area
+
+    return (
+        precio_total, precio_m2_pred, seg_label, c_id,
+        model, X_pred_safe, datos_colonia,
+        precio_base_total, precio_base_m2,
+        distancias_nuevas,
+    )
 
 # ============================================================
 # CONTROLES DE ENTRADA (SIDEBAR)
 # ============================================================
 with st.sidebar:
     st.header("🏢 Parámetros del Inmueble")
-    alcaldia_sel      = st.selectbox("Alcaldía", ALCALDIAS_DISPONIBLES)
+    alcaldia_sel       = st.selectbox("Alcaldía", ALCALDIAS_DISPONIBLES)
     colonias_filtradas = ALCALDIA_COLONIAS.get(alcaldia_sel, [])
-    colonia_sel       = st.selectbox(
+    colonia_sel        = st.selectbox(
         "Colonia", colonias_filtradas, key=f"colonia_{alcaldia_sel}"
     )
 
-    area      = st.slider("Área Habitable (m²)", 25, 500, 120)
-    rooms     = st.number_input("Recámaras", min_value=1, max_value=10, value=3)
-    baths     = st.number_input("Baños Completos", min_value=1.0,
-                                max_value=10.0, value=2.0, step=0.5)
-    parking   = st.number_input("Espacios de Estacionamiento",
-                                min_value=0, max_value=10, value=1)
+    area       = st.slider("Área Habitable (m²)", 25, 500, 120)
+    rooms      = st.number_input("Recámaras", min_value=1, max_value=10, value=3)
+    baths      = st.number_input("Baños Completos", min_value=1.0,
+                                 max_value=10.0, value=2.0, step=0.5)
+    parking    = st.number_input("Espacios de Estacionamiento",
+                                 min_value=0, max_value=10, value=1)
     antiguedad = st.slider("Antigüedad de la Estructura (Años)", 0, 80, 10)
+
+    st.markdown("---")
+    st.caption("📍 Usa la herramienta de marcador (🔵) en el mapa para elegir un punto específico dentro de tu colonia y confirma con el botón.")
 
 # ============================================================
 # PREDICCIÓN
 # ============================================================
-( precio, precio_m2, seg_label, cluster_id,
-  modelo_fit, x_input, datos_colonia,
-  precio_base_total, precio_base_m2
+_key_lat       = f"marker_lat_{colonia_sel}"
+_key_lon       = f"marker_lon_{colonia_sel}"
+_key_confirmado = f"punto_confirmado_{colonia_sel}"
+_key_dist       = f"distancias_punto_{colonia_sel}"
+
+lat_base = float(REF_ESPACIAL.get(colonia_sel, {}).get("latitud",   19.43))
+lon_base = float(REF_ESPACIAL.get(colonia_sel, {}).get("longitud", -99.13))
+
+if _key_lat not in st.session_state:
+    st.session_state[_key_lat] = lat_base
+if _key_lon not in st.session_state:
+    st.session_state[_key_lon] = lon_base
+if _key_confirmado not in st.session_state:
+    st.session_state[_key_confirmado] = False
+if _key_dist not in st.session_state:
+    st.session_state[_key_dist] = None
+
+lat_marcador = st.session_state[_key_lat]
+lon_marcador = st.session_state[_key_lon]
+punto_confirmado = st.session_state[_key_confirmado]
+distancias_confirmadas = st.session_state[_key_dist]
+
+# Predicción base (siempre se ejecuta primero como fallback)
+(
+    precio, precio_m2, seg_label, cluster_id,
+    modelo_fit, x_input, datos_colonia,
+    precio_base_total, precio_base_m2
 ) = predict_price(area, rooms, baths, parking, antiguedad, colonia_sel)
+
+# Si el marcador se movió del centroide (confirmado o no), recalcular con el punto real.
+# Esto corrige el bug de doble clic: antes solo se recalculaba si punto_confirmado=True.
+_punto_movido = (
+    abs(lat_marcador - lat_base) > 0.000001
+    or abs(lon_marcador - lon_base) > 0.000001
+)
+
+if _punto_movido or punto_confirmado:
+    (
+        precio, precio_m2, seg_label, cluster_id,
+        modelo_fit, x_input, datos_colonia,
+        precio_base_total, precio_base_m2,
+        distancias_confirmadas,
+    ) = predict_price_con_punto(
+        area, rooms, baths, parking, antiguedad, colonia_sel,
+        lat_marcador, lon_marcador
+    )
+    st.session_state[_key_dist] = distancias_confirmadas
+
+datos_entorno = datos_colonia.copy()
+if distancias_confirmadas:
+    datos_entorno.update(distancias_confirmadas)
 
 # ============================================================
 # CUADRO DE MANDO PRINCIPAL
@@ -664,10 +1029,8 @@ c3.metric("Segmento / Clúster",
 c4.metric("Índice de Gentrificación",
           round(datos_colonia.get("gentrification_index", 0), 3))
 
-
 def fmt_dist(m):
     return f"{m:.0f} m" if m < 1000 else f"{m/1000:.1f} km"
-
 
 # ============================================================
 # PANEL DE ANÁLISIS DE ENTORNO URBANO
@@ -679,7 +1042,7 @@ with st.expander("🌎 Análisis de Entorno Urbano y Socioespacial",
     st.markdown("### 🏬 1. Accesibilidad a Escala Humana (Ciudad de 15 Minutos)")
 
     with st.container(border=True):
-        score_15 = float(datos_colonia.get("score_15min", 0))
+        score_15   = float(datos_entorno.get("score_15min", 0))
         c_score, c_prog = st.columns([1, 3])
         with c_score:
             st.metric("🎯 Índice General 15 Min", round(score_15, 3))
@@ -697,7 +1060,7 @@ with st.expander("🌎 Análisis de Entorno Urbano y Socioespacial",
         fila2_col1, fila2_col2 = st.columns(2)
 
         with fila1_col1:
-            acceso_salud = float(datos_colonia.get("acceso_salud_15m", 0))
+            acceso_salud = float(datos_entorno.get("acceso_salud_15m", 0))
             st.metric("🏥 Servicios de Salud Cercanos",
                       f"{acceso_salud:.0f} Unidades")
             if acceso_salud >= 6:   st.success("Alta densidad médica.")
@@ -706,7 +1069,7 @@ with st.expander("🌎 Análisis de Entorno Urbano y Socioespacial",
             st.caption("Estructura unificada y depurada.")
 
         with fila1_col2:
-            acceso_edu = float(datos_colonia.get("acceso_educacion_15m", 0))
+            acceso_edu = float(datos_entorno.get("acceso_educacion_15m", 0))
             st.metric("📚 Planteles Educativos", f"{acceso_edu:.0f} Escuelas")
             if acceso_edu >= 40:   st.success("Alta oferta escolar.")
             elif acceso_edu >= 15: st.info("Infraestructura escolar suficiente.")
@@ -714,9 +1077,9 @@ with st.expander("🌎 Análisis de Entorno Urbano y Socioespacial",
             st.caption("Búfer operativo de 1.2 km.")
 
         with fila2_col1:
-            parque       = float(datos_colonia.get("dist_area_verde_recreativa_m",
-                                  datos_colonia.get("dist_area_verde_m", 9999)))
-            dens_parques = float(datos_colonia.get("densidad_parques_15m", 0))
+            parque     = float(datos_entorno.get("dist_area_verde_recreativa_m",
+                       datos_entorno.get("dist_area_verde_m", 9999)))
+            dens_parques = float(datos_entorno.get("densidad_parques_15m", 0))
             st.metric("🌳 Espacio Público Recreativo", f"{parque:.0f} m")
             if parque <= 300:   st.success("Radio óptimo de proximidad.")
             elif parque <= 800: st.info("Distancia media de acceso.")
@@ -724,7 +1087,7 @@ with st.expander("🌎 Análisis de Entorno Urbano y Socioespacial",
             st.caption(f"Aprox. {dens_parques:.0f} espacios verdes detectados.")
 
         with fila2_col2:
-            comercio_dist = float(datos_colonia.get("dist_comercio_m", 5000))
+            comercio_dist = float(datos_entorno.get("dist_comercio_m", 5000))
             st.metric("🛍️ Centros de Abasto / Comercio", fmt_dist(comercio_dist))
             if comercio_dist <= 600:   st.success("Abasto local inmediato.")
             elif comercio_dist <= 1500: st.info("Proximidad comercial aceptable.")
@@ -738,12 +1101,12 @@ with st.expander("🌎 Análisis de Entorno Urbano y Socioespacial",
     with st.container(border=True):
         c2_izquierda, c2_derecha = st.columns([3, 1.2])
 
-        d_metro  = float(datos_colonia.get("dist_metro_m",    9999))
-        d_mb     = float(datos_colonia.get("dist_metrobus_m", 9999))
-        d_tren   = float(datos_colonia.get("dist_tren_m",     9999))
-        d_trole  = float(datos_colonia.get("dist_trole_m",    9999))
-        d_cable  = float(datos_colonia.get("dist_cable_m",    9999))
-        ciclovias = float(datos_colonia.get("densidad_ciclovia_15m", 0))
+        d_metro  = float(datos_entorno.get("dist_metro_m",    9999))
+        d_mb     = float(datos_entorno.get("dist_metrobus_m", 9999))
+        d_tren   = float(datos_entorno.get("dist_tren_m",     9999))
+        d_trole  = float(datos_entorno.get("dist_trole_m",    9999))
+        d_cable  = float(datos_entorno.get("dist_cable_m",    9999))
+        ciclovias = float(datos_entorno.get("densidad_ciclovia_15m", 0))
 
         with c2_izquierda:
             sub_c1, sub_c2, sub_c3 = st.columns(3)
@@ -989,6 +1352,8 @@ with st.expander("🌎 Análisis de Entorno Urbano y Socioespacial",
             else:                       st.warning("Ubicación periférica o habitacional.")
             st.caption("Subcentros: Centro, Polanco, Santa Fe, Insurgentes, Del Valle, Reforma.")
 
+
+
 # ============================================================
 # INTERPRETABILIDAD HEDÓNICA
 # ============================================================
@@ -1033,7 +1398,6 @@ NOMBRES_VARIABLES = {
     "spatial_lag_price":            "Lag espacial de precios vecinos",
     "precio_vecinal_local":         "Precio vecinal local promedio",
     "lag_x_area":                   "Lag espacial × Área",
-    # Catastrales
     "cat_mean_valor_suelo_200m":        "Valor catastral suelo promedio 200 m",
     "cat_mean_vus_200m":                "Valor unitario suelo catastral 200 m",
     "cat_mean_antiguedad_200m":         "Antigüedad catastral promedio 200 m",
@@ -1124,23 +1488,365 @@ else:
 # ============================================================
 # MAPA DE CONTEXTO
 # ============================================================
-st.subheader("Ubicación Aproximada de la Colonia")
-map_df = pd.DataFrame({
-    "lat": [datos_colonia.get("latitud",  19.43)],
-    "lon": [datos_colonia.get("longitud", -99.13)]
-})
-st.map(map_df)
+import json
+
+RADIO_M = 1200
+
+CAPAS_CONFIG = {
+    "metro":       {"label": "🚇 STC Metro",     "color": "blue",      "icono": "train",          "prefix": "fa", "max_puntos": 30},
+    "metrobus":    {"label": "🚌 Metrobús",       "color": "red",       "icono": "bus",            "prefix": "fa", "max_puntos": 30},
+    "tren":        {"label": "🚊 Tren Ligero",    "color": "cadetblue", "icono": "subway",         "prefix": "fa", "max_puntos": 20},
+    "trolebus":    {"label": "🚎 Trolebús",       "color": "purple",    "icono": "bolt",           "prefix": "fa", "max_puntos": 30},
+    "cablebus":    {"label": "🚠 Cablebús",       "color": "darkblue",  "icono": "cloud",          "prefix": "fa", "max_puntos": 20},
+    "parques":     {"label": "🌳 Áreas Verdes",   "color": "green",     "icono": "leaf",           "prefix": "fa", "max_puntos": 25},
+    "salud":       {"label": "🏥 Salud",          "color": "darkred",   "icono": "plus-square",    "prefix": "fa", "max_puntos": 20},
+    "comercio":    {"label": "🛍️ Comercio",      "color": "orange",    "icono": "shopping-cart",  "prefix": "fa", "max_puntos": 15},
+    "esc_privada": {"label": "🏫 Esc. Privadas", "color": "beige",     "icono": "graduation-cap", "prefix": "fa", "max_puntos": 20},
+    "esc_publica": {"label": "🏫 Esc. Públicas", "color": "darkgreen", "icono": "graduation-cap", "prefix": "fa", "max_puntos": 20},
+    "ciclovias":   {"label": "🚲 Ciclovías",      "color": "teal",      "icono": "road",           "prefix": "fa", "max_puntos": 20},
+}
+
+_COLOR_HEX = {
+    "blue": "#1A73E8", "red": "#E53935", "cadetblue": "#5F9EA0",
+    "purple": "#7B1FA2", "darkblue": "#1565C0", "green": "#388E3C",
+    "darkred": "#B71C1C", "orange": "#F57C00", "beige": "#A1887F",
+    "darkgreen": "#1B5E20", "teal": "#008080",
+}
+
+def _latlon_a_utm_mapa(lat, lon):
+    gdf = gpd.GeoDataFrame(
+        geometry=gpd.points_from_xy([lon], [lat]), crs="EPSG:4326"
+    ).to_crs("EPSG:32614")
+    return gdf.geometry.iloc[0].x, gdf.geometry.iloc[0].y
+
+def _utm_a_latlon_mapa(pts_utm):
+    if len(pts_utm) == 0:
+        return []
+    gdf = gpd.GeoDataFrame(
+        geometry=gpd.points_from_xy(pts_utm[:, 0], pts_utm[:, 1]),
+        crs="EPSG:32614"
+    ).to_crs("EPSG:4326")
+    return [(g.y, g.x) for g in gdf.geometry]
+
+poligono_colonia_geojson = POLIGONOS_COLONIAS.get(colonia_sel, None)
+poligono_js = json.dumps(poligono_colonia_geojson) if poligono_colonia_geojson else "null"
+
+# Construcción del mapa
+m = folium.Map(
+    location=[lat_marcador, lon_marcador],
+    zoom_start=15,
+    tiles="OpenStreetMap",
+)
+
+# Polígono de la colonia
+if poligono_colonia_geojson:
+    folium.GeoJson(
+        poligono_colonia_geojson,
+        style_function=lambda _: {
+            "color":       "#1A73E8",
+            "weight":      2.5,
+            "fillColor":   "#1A73E8",
+            "fillOpacity": 0.06,
+            "dashArray":   "6 4",
+        },
+        tooltip="Límite de la colonia",
+    ).add_to(m)
+
+lat_actual = st.session_state[_key_lat]
+lon_actual = st.session_state[_key_lon]
+
+# Círculo de radio (actualizado con el punto actual)
+folium.Circle(
+    location=[lat_actual, lon_actual],
+    radius=RADIO_M,
+    color="#E53935",
+    weight=2,
+    fill=True,
+    fill_color="#E53935",
+    fill_opacity=0.05,
+    tooltip=f"Radio de análisis: {RADIO_M/1000:.1f} km | {'Confirmado' if punto_confirmado else 'Centroide'}",
+).add_to(m)
+
+
+# Marcador fijo que muestra la posición actual confirmada (no arrastrable)
+folium.Marker(
+    location=[lat_actual, lon_actual],
+    icon=folium.Icon(color="red", icon="home", prefix="fa"),
+    tooltip="📍 Posición actual — usa el botón ✏️ (izquierda) para colocar un nuevo marcador",
+    popup=folium.Popup(
+        f"<b>📍 Punto de análisis</b><br>"
+        f"Colonia: <b>{colonia_sel.title()}</b><br>"
+        f"<span style='font-size:10px;color:#888'>"
+        f"Usa la herramienta de marcador (🔵 en el panel izquierdo)<br>"
+        f"para colocar un nuevo punto, luego presiona <b>Confirmar ubicación</b></span>",
+        max_width=240,
+    ),
+    draggable=False,
+).add_to(m)
+
+# Plugin Draw: solo marcadores, para capturar nueva posición confiablemente
+# via last_active_drawing con geometría tipo Point
+from folium.plugins import Draw
+Draw(
+    draw_options={
+        "marker":       True,
+        "polyline":     False,
+        "polygon":      False,
+        "circle":       False,
+        "rectangle":    False,
+        "circlemarker": False,
+    },
+    edit_options={"edit": False, "remove": False},
+    position="topleft",
+).add_to(m)
+
+# Capas de servicios (puntos)
+centro_utm = _latlon_a_utm_mapa(lat_actual, lon_actual)
+resumen_capas = {}
+
+for clave, (pts_utm, nombres) in CAPAS_SERVICIOS.items():
+    cfg = CAPAS_CONFIG[clave]
+    if len(pts_utm) == 0:
+        resumen_capas[clave] = 0
+        continue
+
+    tree = cKDTree(pts_utm)
+    idx  = tree.query_ball_point(centro_utm, r=RADIO_M)
+
+    if not idx:
+        resumen_capas[clave] = 0
+        continue
+
+    pts_dentro     = pts_utm[idx]
+    nombres_dentro = [nombres[i] for i in idx] if nombres else []
+    total          = len(pts_dentro)
+    resumen_capas[clave] = total
+
+    max_p = cfg["max_puntos"]
+    if total > max_p:
+        step           = max(1, total // max_p)
+        pts_dentro     = pts_dentro[::step][:max_p]
+        nombres_dentro = nombres_dentro[::step][:max_p]
+
+    coords_ll = _utm_a_latlon_mapa(pts_dentro)
+    grupo     = folium.FeatureGroup(name=cfg["label"], show=True)
+
+    for i, (lt, ln) in enumerate(coords_ll):
+        nombre_punto = nombres_dentro[i] if i < len(nombres_dentro) else f"{cfg['label']} #{i+1}"
+        folium.Marker(
+            location=[lt, ln],
+            icon=folium.Icon(
+                color=cfg["color"],
+                icon=cfg["icono"],
+                prefix=cfg["prefix"],
+            ),
+            tooltip=folium.Tooltip(nombre_punto, sticky=True),
+            popup=folium.Popup(
+                f"<b>{cfg['label']}</b><br>{nombre_punto}<br>"
+                f"<span style='font-size:10px;color:#888'>{lt:.5f}, {ln:.5f}</span>",
+                max_width=200,
+            ),
+        ).add_to(grupo)
+
+    grupo.add_to(m)
+
+# Capa de líneas: ciclovías
+_cic_utm = CAPAS_LINEAS.get("ciclovias_utm", gpd.GeoDataFrame(geometry=[], crs="EPSG:32614"))
+_cic_wgs = CAPAS_LINEAS.get("ciclovias_wgs", gpd.GeoDataFrame(geometry=[], crs="EPSG:4326"))
+if not _cic_utm.empty:
+    _circulo_utm = Point(centro_utm[0], centro_utm[1]).buffer(RADIO_M)
+    # Usar mismo índice para ambos GDFs (tienen filas idénticas)
+    _mask = _cic_utm.intersects(_circulo_utm)
+    _cic_wgs_dentro = _cic_wgs[_mask]
+    if not _cic_wgs_dentro.empty:
+        resumen_capas["ciclovias"] = len(_cic_wgs_dentro)
+        grupo_lineas = folium.FeatureGroup(name="🚲 Ciclovías", show=True)
+        for _, row in _cic_wgs_dentro.iterrows():
+            nombre = str(row.get("NOMBRE", "") or "").strip()
+            if not nombre or nombre in ("nan", "None"):
+                nombre = "Ciclovía sin nombre"
+            if len(nombre) > 50:
+                nombre = nombre[:47] + "…"
+            folium.GeoJson(
+                row.geometry.__geo_interface__,
+                style_function=lambda feature: {"color": "#008080", "weight": 3, "opacity": 0.85},
+                tooltip=folium.Tooltip(f"🚲 {nombre}", sticky=True),
+                popup=folium.Popup(f"<b>Ciclovía</b><br>{nombre}", max_width=200),
+            ).add_to(grupo_lineas)
+        grupo_lineas.add_to(m)
+    else:
+        resumen_capas["ciclovias"] = 0
+else:
+    resumen_capas["ciclovias"] = 0
+    
+# LayerControl
+folium.LayerControl(collapsed=True, position="topright").add_to(m)
+
+# Leyenda
+leyenda_filas = "".join([
+    f"<div style='display:flex;align-items:center;margin-bottom:6px;'>"
+    f"<span style='background:{_COLOR_HEX[cfg['color']]};width:13px;height:13px;"
+    f"border-radius:50%;display:inline-block;margin-right:8px;"
+    f"border:1px solid rgba(0,0,0,0.15);flex-shrink:0;'></span>"
+    f"<span style='font-size:12px;color:#222;line-height:1.3;'>{cfg['label']}</span></div>"
+    for clave, cfg in CAPAS_CONFIG.items()
+])
+
+leyenda_html = f"""
+<div style="
+    position: fixed;
+    bottom: 30px; left: 30px;
+    z-index: 9999;
+    background: rgba(255,255,255,0.97);
+    border: 1px solid #ccc;
+    border-radius: 10px;
+    padding: 12px 16px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.18);
+    font-family: 'Segoe UI', Arial, sans-serif;
+    min-width: 175px;
+">
+    <div style='font-weight:700;font-size:13px;margin-bottom:9px;color:#111;
+                border-bottom:1px solid #eee;padding-bottom:6px;'>
+        Servicios en radio 1.2 km
+    </div>
+    {leyenda_filas}
+    <div style='margin-top:8px;padding-top:6px;border-top:1px solid #eee;
+                font-size:10px;color:#666;'>
+        🔴 Límite de la colonia
+    </div>
+</div>
+"""
+m.get_root().html.add_child(folium.Element(leyenda_html))
+
+# Render en Streamlit
+st.subheader("🗺️ Entorno Urbano — Radio 1.2 km")
+
+if punto_confirmado:
+    st.success(
+        f"✅ Punto confirmado en {lat_marcador:.5f}, {lon_marcador:.5f} — "
+        f"distancias y precio recalculados."
+    )
+else:
+    st.info("📍 Arrastra el ícono 🏠 dentro de la colonia y confirma la ubicación.")
+
+# Contadores de servicios
+iconos_txt = {
+    "metro": "🚇", "metrobus": "🚌", "tren": "🚊", "trolebus": "🚎",
+    "cablebus": "🚠", "parques": "🌳", "salud": "🏥", "comercio": "🛍️",
+    "esc_privada": "🏫", "esc_publica": "🏫", "ciclovias": "🚲",
+}
+nombres_cortos = {
+    "metro": "Metro", "metrobus": "Metrobús", "tren": "Tren", "trolebus": "Trolebús",
+    "cablebus": "Cablebús", "parques": "Parques", "salud": "Salud", "comercio": "Comercio",
+    "esc_privada": "Esc. Priv.", "esc_publica": "Esc. Púb.", "ciclovias": "Ciclovías",
+}
+
+cols_resumen = st.columns(len(resumen_capas))
+for col, (clave, n) in zip(cols_resumen, resumen_capas.items()):
+    col.metric(f"{iconos_txt[clave]} {nombres_cortos[clave]}", n)
 
 # ============================================================
-# METADATOS DE SOPORTE
+# RESULTADO DEL MAPA
 # ============================================================
-with st.expander("Metadatos del Sistema (Soporte Técnico)"):
-    st.write({
-        "Segmento de Mercado":     seg_label.capitalize(),
-        "ID Clúster Activo":       int(cluster_id),
-        "Centroide Latitud":       float(datos_colonia.get("latitud",  19.43)),
-        "Centroide Longitud":      float(datos_colonia.get("longitud", -99.13)),
-        "Mediana precio m² zona":  float(PRICE_M2_COL.get(colonia_sel, 0)),
-        "Features en el modelo":   len(feat_names),
-        "Features estáticas":      len(STATIC_FEATURES),
-    })
+
+resultado_mapa = st_folium(
+    m,
+    use_container_width=True,
+    height=540,
+    key=f"mapa_{colonia_sel}",
+    returned_objects=["last_active_drawing"],  # SOLO dibujo, no clics en otros marcadores
+)
+
+# ============================================================
+# DETECTAR NUEVO PUNTO COLOCADO CON LA HERRAMIENTA DRAW
+# ============================================================
+
+from shapely.geometry import Point, shape
+
+_drawn = resultado_mapa.get("last_active_drawing")
+
+nuevo_lat, nuevo_lon = None, None
+
+# last_active_drawing → {"geometry": {"type": "Point", "coordinates": [lon, lat]}}
+if _drawn and isinstance(_drawn, dict):
+    _geom = _drawn.get("geometry", {})
+    if _geom.get("type") == "Point":
+        _coords = _geom.get("coordinates", [])
+        if len(_coords) == 2:
+            nuevo_lat = _coords[1]
+            nuevo_lon = _coords[0]
+
+if nuevo_lat is not None and nuevo_lon is not None:
+    poly_geojson = POLIGONOS_COLONIAS.get(colonia_sel)
+    _dentro = True
+    if poly_geojson is not None:
+        from shapely.geometry import Point as _Pt, shape as _shape
+        _poly = _shape(poly_geojson)
+        _dentro = _poly.contains(_Pt(nuevo_lon, nuevo_lat))
+
+    if _dentro:
+        if (
+            abs(nuevo_lat - st.session_state[_key_lat]) > 0.000001
+            or abs(nuevo_lon - st.session_state[_key_lon]) > 0.000001
+        ):
+            st.session_state[_key_lat] = nuevo_lat
+            st.session_state[_key_lon] = nuevo_lon
+            st.session_state[_key_confirmado] = False
+            st.rerun()
+    else:
+        # NO hacer rerun — solo avisar. El marcador se redibujará en la posición
+        # válida de session_state en el próximo rerun natural (al confirmar).
+        st.warning("⚠️ Posición fuera de la colonia — no se actualizó. Mueve el marcador dentro del límite azul y confirma.")
+
+# ============================================================
+# POSICIÓN ACTUAL REAL DEL MARCADOR
+# SIEMPRE LEER DESDE SESSION_STATE
+# ============================================================
+
+lat_actual = st.session_state[_key_lat]
+lon_actual = st.session_state[_key_lon]
+
+punto_confirmado = st.session_state[_key_confirmado]
+
+# ============================================================
+# BOTONES
+# ============================================================
+
+col_btn1, col_btn2, _ = st.columns([2, 2, 4])
+
+with col_btn1:
+
+    if st.button(
+        "✅ Confirmar ubicación",
+        type="primary",
+        use_container_width=True
+    ):
+        st.session_state[_key_confirmado] = True
+        # Limpiar distancias cacheadas para que se recalculen con el punto actual
+        st.session_state[_key_dist] = None
+        st.rerun()
+
+with col_btn2:
+
+    if st.button(
+        "↩️ Restablecer centroide",
+        use_container_width=True
+    ):
+
+        st.session_state[_key_lat] = lat_base
+        st.session_state[_key_lon] = lon_base
+
+        st.session_state[_key_confirmado] = False
+        st.session_state[_key_dist] = None
+
+        st.rerun()
+
+# ============================================================
+# TEXTO INFORMATIVO
+# ============================================================
+
+st.caption(
+    f"📐 Radio: {RADIO_M} m · "
+    f"Punto: {'confirmado ✅' if punto_confirmado else 'pendiente de confirmar'} · "
+    f"{lat_actual:.5f}, {lon_actual:.5f}"
+)
