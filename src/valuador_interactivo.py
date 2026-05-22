@@ -50,6 +50,7 @@ warnings.filterwarnings("ignore")
 import folium
 from streamlit_folium import st_folium
 
+
 # ============================================================
 # CONFIGURACIÓN DE LA INTERFAZ DE STREAMLIT
 # ============================================================
@@ -273,6 +274,17 @@ def preparar_sistema():
 
     df["colonia_real"]  = joined["colonia_clean"].values
     df["alcaldia_real"] = joined["alcaldia_clean"].values
+
+    # ============================================================
+    # CLAVE ÚNICA ALCALDÍA + COLONIA
+    # Evita confusión entre colonias homónimas
+    # ============================================================
+    df["colonia_key"] = (
+        df["alcaldia_real"].astype(str)
+        + "||" +
+        df["colonia_real"].astype(str)
+    )
+
     df = df.dropna(subset=["colonia_real", "alcaldia_real"]).copy()
     df = df.reset_index(drop=True)
 
@@ -486,16 +498,16 @@ def preparar_sistema():
     ))
 
     referencia_espacial = (
-        df.groupby("colonia_real")[cols_ref]
+        df.groupby("colonia_key")[cols_ref]
         .mean()
         .to_dict("index")
     )
 
     price_m2_col = (
-        df.groupby("colonia_real")["price_m2_raw"]
+        df.groupby("colonia_key")["price_m2_raw"]
         .median()
         .to_dict()
-    )
+    )   
 
     alcaldia_colonias    = (
         df.groupby("alcaldia_real")["colonia_real"]
@@ -506,21 +518,42 @@ def preparar_sistema():
     alcaldias_disponibles = sorted(alcaldia_colonias.keys())
 
     price_m2_by_colonia = (
-        df.groupby("colonia_real")["price_m2_raw"].mean().to_dict()
+        df.groupby("colonia_key")["price_m2_raw"]
+        .mean()
+        .to_dict()
     )
     coords_by_colonia = (
-        df.groupby("colonia_real")[["longitud", "latitud"]].mean().to_dict("index")
+        df.groupby("colonia_key")[["longitud", "latitud"]]
+        .mean()
+        .to_dict("index")
     )
 
     # Polígonos de colonias
-    colonias_geo = colonias[["colonia_clean", "geometry"]].copy()
-    colonias_geo = colonias_geo[colonias_geo.geometry.notnull()].copy()
-    colonias_geo = colonias_geo.dissolve(by="colonia_clean").reset_index()
+    colonias_geo = colonias[
+        ["colonia_clean", "alcaldia_clean", "geometry"]
+    ].copy()
+
+    colonias_geo = colonias_geo[
+        colonias_geo.geometry.notnull()
+    ].copy()
+
+    colonias_geo["colonia_key"] = (
+        colonias_geo["alcaldia_clean"].astype(str)
+        + "||" +
+        colonias_geo["colonia_clean"].astype(str)
+    )
+
+    colonias_geo = (
+        colonias_geo
+        .dissolve(by="colonia_key")
+        .reset_index()
+    )
+
     poligonos_colonias = {
-        row["colonia_clean"]: row["geometry"].__geo_interface__
+        row["colonia_key"]: row["geometry"].__geo_interface__
         for _, row in colonias_geo.iterrows()
     }
-
+    
     # ----------------------------------------------------------
     # 9. CARGA DE CAPAS DE PUNTOS PARA VISUALIZACIÓN
     # ----------------------------------------------------------
@@ -946,8 +979,15 @@ with st.sidebar:
     st.header("🏢 Parámetros del Inmueble")
     alcaldia_sel       = st.selectbox("Alcaldía", ALCALDIAS_DISPONIBLES)
     colonias_filtradas = ALCALDIA_COLONIAS.get(alcaldia_sel, [])
-    colonia_sel        = st.selectbox(
-        "Colonia", colonias_filtradas, key=f"colonia_{alcaldia_sel}"
+    
+    colonia_sel = st.selectbox(
+    "Colonia", colonias_filtradas,
+    key=f"colonia_{alcaldia_sel}"
+)
+    
+    # Llave única colonia + alcaldía
+    colonia_key_sel = (
+        f"{alcaldia_sel}||{colonia_sel}"
     )
 
     area       = st.slider("Área Habitable (m²)", 25, 500, 120)
@@ -964,13 +1004,20 @@ with st.sidebar:
 # ============================================================
 # PREDICCIÓN
 # ============================================================
-_key_lat       = f"marker_lat_{colonia_sel}"
-_key_lon       = f"marker_lon_{colonia_sel}"
-_key_confirmado = f"punto_confirmado_{colonia_sel}"
-_key_dist       = f"distancias_punto_{colonia_sel}"
+_key_lat        = f"marker_lat_{colonia_key_sel}"
+_key_lon        = f"marker_lon_{colonia_key_sel}"
+_key_confirmado = f"punto_confirmado_{colonia_key_sel}"
+_key_dist       = f"distancias_punto_{colonia_key_sel}"
 
-lat_base = float(REF_ESPACIAL.get(colonia_sel, {}).get("latitud",   19.43))
-lon_base = float(REF_ESPACIAL.get(colonia_sel, {}).get("longitud", -99.13))
+lat_base = float(
+    REF_ESPACIAL.get(colonia_key_sel, {})
+    .get("latitud", 19.43)
+)
+
+lon_base = float(
+    REF_ESPACIAL.get(colonia_key_sel, {})
+    .get("longitud", -99.13)
+)
 
 if _key_lat not in st.session_state:
     st.session_state[_key_lat] = lat_base
@@ -991,7 +1038,7 @@ distancias_confirmadas = st.session_state[_key_dist]
     precio, precio_m2, seg_label, cluster_id,
     modelo_fit, x_input, datos_colonia,
     precio_base_total, precio_base_m2
-) = predict_price(area, rooms, baths, parking, antiguedad, colonia_sel)
+) = predict_price(area, rooms, baths, parking, antiguedad, colonia_key_sel)
 
 # Si el marcador se movió del centroide (confirmado o no), recalcular con el punto real.
 # Esto corrige el bug de doble clic: antes solo se recalculaba si punto_confirmado=True.
@@ -1007,7 +1054,7 @@ if _punto_movido or punto_confirmado:
         precio_base_total, precio_base_m2,
         distancias_confirmadas,
     ) = predict_price_con_punto(
-        area, rooms, baths, parking, antiguedad, colonia_sel,
+        area, rooms, baths, parking, antiguedad, colonia_key_sel,
         lat_marcador, lon_marcador
     )
     st.session_state[_key_dist] = distancias_confirmadas
@@ -1021,832 +1068,1122 @@ if distancias_confirmadas:
 # ============================================================
 st.title("Sistema de Valuación Inmobiliaria CDMX")
 
-c1, c2, c3, c4 = st.columns(4)
-c1.metric("Precio Estimado Comercial",  f"${precio:,.0f} MXN")
-c2.metric("Valor Unitario (m²)",        f"${precio_m2:,.0f} MXN/m²")
-c3.metric("Segmento / Clúster",
-          f"{'Lujo' if seg_label == 'lujo' else 'Estándar'} · C{cluster_id}")
-c4.metric("Índice de Gentrificación",
-          round(datos_colonia.get("gentrification_index", 0), 3))
-
-def fmt_dist(m):
-    return f"{m:.0f} m" if m < 1000 else f"{m/1000:.1f} km"
-
-# ============================================================
-# PANEL DE ANÁLISIS DE ENTORNO URBANO
-# ============================================================
-with st.expander("🌎 Análisis de Entorno Urbano y Socioespacial",
-                 expanded=True):
-
-    # --- Bloque 1: Ciudad de 15 Minutos ---
-    st.markdown("### 🏬 1. Accesibilidad a Escala Humana (Ciudad de 15 Minutos)")
-
-    with st.container(border=True):
-        score_15   = float(datos_entorno.get("score_15min", 0))
-        c_score, c_prog = st.columns([1, 3])
-        with c_score:
-            st.metric("🎯 Índice General 15 Min", round(score_15, 3))
-        with c_prog:
-            st.markdown("<div style='padding-top:10px;'></div>",
-                        unsafe_allow_html=True)
-            st.progress(min(score_15, 1.0))
-            if score_15 >= 0.7:   st.success("Alta cobertura peatonal.")
-            elif score_15 >= 0.4: st.info("Cobertura urbana funcional.")
-            else:                  st.warning("Dependencia de vehículo.")
-
-        st.markdown("---")
-
-        fila1_col1, fila1_col2 = st.columns(2)
-        fila2_col1, fila2_col2 = st.columns(2)
-
-        with fila1_col1:
-            acceso_salud = float(datos_entorno.get("acceso_salud_15m", 0))
-            st.metric("🏥 Servicios de Salud Cercanos",
-                      f"{acceso_salud:.0f} Unidades")
-            if acceso_salud >= 6:   st.success("Alta densidad médica.")
-            elif acceso_salud >= 2: st.info("Cobertura hospitalaria básica.")
-            else:                   st.warning("Déficit de equipamiento médico.")
-            st.caption("Estructura unificada y depurada.")
-
-        with fila1_col2:
-            acceso_edu = float(datos_entorno.get("acceso_educacion_15m", 0))
-            st.metric("📚 Planteles Educativos", f"{acceso_edu:.0f} Escuelas")
-            if acceso_edu >= 40:   st.success("Alta oferta escolar.")
-            elif acceso_edu >= 15: st.info("Infraestructura escolar suficiente.")
-            else:                  st.warning("Disponibilidad local limitada.")
-            st.caption("Búfer operativo de 1.2 km.")
-
-        with fila2_col1:
-            parque     = float(datos_entorno.get("dist_area_verde_recreativa_m",
-                       datos_entorno.get("dist_area_verde_m", 9999)))
-            dens_parques = float(datos_entorno.get("densidad_parques_15m", 0))
-            st.metric("🌳 Espacio Público Recreativo", f"{parque:.0f} m")
-            if parque <= 300:   st.success("Radio óptimo de proximidad.")
-            elif parque <= 800: st.info("Distancia media de acceso.")
-            else:               st.warning("Déficit de áreas verdes.")
-            st.caption(f"Aprox. {dens_parques:.0f} espacios verdes detectados.")
-
-        with fila2_col2:
-            comercio_dist = float(datos_entorno.get("dist_comercio_m", 5000))
-            st.metric("🛍️ Centros de Abasto / Comercio", fmt_dist(comercio_dist))
-            if comercio_dist <= 600:   st.success("Abasto local inmediato.")
-            elif comercio_dist <= 1500: st.info("Proximidad comercial aceptable.")
-            else:                       st.warning("Distancia prolongada a zonas comerciales.")
-
-    st.markdown("<br>", unsafe_allow_html=True)
-
-    # --- Bloque 2: Transporte ---
-    st.markdown("### 🚊 2. Conectividad y Red de Transporte Estructurado")
-
-    with st.container(border=True):
-        c2_izquierda, c2_derecha = st.columns([3, 1.2])
-
-        d_metro  = float(datos_entorno.get("dist_metro_m",    9999))
-        d_mb     = float(datos_entorno.get("dist_metrobus_m", 9999))
-        d_tren   = float(datos_entorno.get("dist_tren_m",     9999))
-        d_trole  = float(datos_entorno.get("dist_trole_m",    9999))
-        d_cable  = float(datos_entorno.get("dist_cable_m",    9999))
-        ciclovias = float(datos_entorno.get("densidad_ciclovia_15m", 0))
-
-        with c2_izquierda:
-            sub_c1, sub_c2, sub_c3 = st.columns(3)
-            with sub_c1:
-                st.metric("🚇 STC Metro",  fmt_dist(d_metro))
-                st.markdown("<div style='padding-top:15px;'></div>",
-                            unsafe_allow_html=True)
-                st.metric("🚌 Metrobús",   fmt_dist(d_mb))
-            with sub_c2:
-                st.metric("🚊 Tren Ligero", fmt_dist(d_tren))
-                st.markdown("<div style='padding-top:15px;'></div>",
-                            unsafe_allow_html=True)
-                st.metric("🚎 Trolebús",   fmt_dist(d_trole))
-            with sub_c3:
-                st.metric("🚠 Cablebús",   fmt_dist(d_cable))
-                st.markdown("<div style='padding-top:15px;'></div>",
-                            unsafe_allow_html=True)
-                if ciclovias >= 5.0:        status_bici = "Excelente"
-                elif ciclovias >= 1.5:      status_bici = "Funcional"
-                elif ciclovias > 0:         status_bici = "Escasa"
-                else:                       status_bici = "Ninguna"
-                st.metric("🚲 Infraestructura Ciclista", status_bici,
-                          help=f"{ciclovias:.1f} segmentos en radio 15 min.")
-
-        with c2_derecha:
-            min_dist = min([d_metro, d_mb, d_tren, d_trole])
-            st.markdown(
-                "<b style='font-size:14px;color:#808495;'>Evaluación Multimodal</b>",
-                unsafe_allow_html=True
-            )
-            if min_dist <= 500:
-                st.success("🟢 **Conectividad Excelente**")
-            elif min_dist <= 1000:
-                st.info("🔵 **Accesibilidad Media**")
-            else:
-                st.warning("🟡 **Cobertura Restringida**")
-
-    st.markdown("<br>", unsafe_allow_html=True)
-
-    # --- Bloque 3: Gentrificación ---
-    st.markdown("### 🏙️ 3. Dinámica de Transformación Socioespacial")
-
-    with st.container(border=True):
-        c3_1, c3_2, c3_3 = st.columns(3)
-
-        gentrif_macro = float(datos_colonia.get("gentrification_index", 0))
-        gentrif_micro = float(datos_colonia.get("gentrif_local_presion", 0))
-        gentrif_map   = float(datos_colonia.get("gentrif_map_score",     0))
-
-        with c3_1:
-            st.metric("🏛️ Cambio Estructural (Alcaldía)", round(gentrif_macro, 3))
-            st.progress(min(gentrif_macro, 1.0))
-            st.caption("Deltas socioeconómicos intercensales (INEGI 2010–2020)")
-
-        with c3_2:
-            st.metric("🏘️ Presión de Mercado Local", round(gentrif_micro, 3))
-            st.progress(min(gentrif_micro, 1.0))
-            st.caption("Variaciones de valor respecto al entorno continuo")
-
-        with c3_3:
-            st.metric("🌆 Vulnerabilidad al Cambio Socioespacial",
-                      round(gentrif_map, 3))
-            st.progress(min(gentrif_map, 1.0))
-            if gentrif_map >= 0.7:
-                st.warning("Proceso acelerado de transformación.")
-            elif gentrif_map >= 0.4:
-                st.info("Área en transición urbana activa.")
-            else:
-                st.success("Estabilidad sociodemográfica relativa.")
-
-    st.markdown("<br>", unsafe_allow_html=True)
-
-    # --- Bloque 4: Variables Catastrales ---
-    st.markdown("### 🗂️ 4. Contexto Catastral del Entorno (Radio 200 m)")
-
-    with st.container(border=True):
-
-        # Fila 1: precio oficial del suelo | valor catastral del terreno
-        cr1_col1, cr1_col2 = st.columns(2)
-
-        with cr1_col1:
-            vus = datos_colonia.get("cat_mean_vus_200m", None)
-            if vus is not None:
-                st.metric(
-                    "📐 Precio oficial del suelo (m²)",
-                    f"${vus:,.0f} MXN/m²",
-                    help="Valor unitario de suelo según el Catastro CDMX 2021."
-                )
-
-        with cr1_col2:
-            vs = datos_colonia.get("cat_mean_valor_suelo_200m", None)
-            if vs is not None:
-                st.metric(
-                    "🏦 Valor catastral del terreno",
-                    f"${vs:,.0f} MXN",
-                    help="Valor total de suelo registrado por predio en el catastro."
-                )
-
-        st.markdown("---")
-
-        # Fila 2: ¿qué tan construida está la zona? | ¿cuántos predios hay cerca?
-        cr2_col1, cr2_col2 = st.columns(2)
-
-        with cr2_col1:
-            ratio = datos_colonia.get("cat_mean_ratio_construccion_200m", None)
-            if ratio is not None:
-                if ratio >= 3.0:
-                    ratio_label = "Zona muy edificada"
-                    ratio_desc  = "Predominan edificios de varios pisos."
-                    ratio_color = "success"
-                elif ratio >= 1.5:
-                    ratio_label = "Zona medianamente edificada"
-                    ratio_desc  = "Mezcla de casas y edificios de baja altura."
-                    ratio_color = "info"
-                else:
-                    ratio_label = "Zona poco edificada"
-                    ratio_desc  = "Predominan casas o predios con poca construcción."
-                    ratio_color = "warning"
-
-                st.metric(
-                    "🏗️ ¿Qué tan construida está la zona?",
-                    f"{ratio:.1f}× el terreno",
-                    help=(
-                        "Indica cuántos metros cuadrados de construcción existen "
-                        "por cada metro cuadrado de terreno en los predios cercanos. "
-                        "Ejemplo: un valor de 2.5 significa que se construyó 2.5 veces "
-                        "la superficie del terreno (típico de edificios de 3 o más pisos). "
-                        "Un valor cercano a 1 indica casas de un solo nivel."
-                    )
-                )
-                if ratio_color == "success":
-                    st.success(f"🏢 {ratio_label} — {ratio_desc}")
-                elif ratio_color == "info":
-                    st.info(f"🏠 {ratio_label} — {ratio_desc}")
-                else:
-                    st.warning(f"🌿 {ratio_label} — {ratio_desc}")
-
-        with cr2_col2:
-            dens = datos_colonia.get("cat_density_predios_200m", None)
-            if dens is not None:
-                if dens >= 80:
-                    dens_label = "Zona muy fraccionada"
-                    dens_desc  = "Muchos predios pequeños, alta densidad urbana."
-                    dens_color = "success"
-                elif dens >= 30:
-                    dens_label = "Zona consolidada"
-                    dens_desc  = "Tejido urbano típico de colonia establecida."
-                    dens_color = "info"
-                else:
-                    dens_label = "Zona poco parcelada"
-                    dens_desc  = "Predios grandes o área en proceso de urbanización."
-                    dens_color = "warning"
-
-                st.metric(
-                    "🏘️ ¿Cuántos predios hay cerca?",
-                    f"{dens:.0f} predios en 200 m",
-                    help=(
-                        "Número de predios catastrados dentro de un radio de 200 metros. "
-                        "Un número alto indica una zona muy urbanizada con lotes pequeños "
-                        "(como el Centro Histórico o Tepito). Un número bajo puede indicar "
-                        "predios grandes, zonas industriales o colonias en desarrollo."
-                    )
-                )
-                if dens_color == "success":
-                    st.success(f"🏙️ {dens_label} — {dens_desc}")
-                elif dens_color == "info":
-                    st.info(f"📌 {dens_label} — {dens_desc}")
-                else:
-                    st.warning(f"🌱 {dens_label} — {dens_desc}")
-
-        st.markdown("---")
-
-        # Fila 3: antigüedad catastral | precio base del submercado
-        cr3_col1, cr3_col2 = st.columns(2)
-
-        with cr3_col1:
-            ant_cat = datos_colonia.get("cat_mean_antiguedad_200m", None)
-            if ant_cat is not None:
-                st.metric(
-                    "📅 Antigüedad promedio de las construcciones",
-                    f"{ant_cat:.0f} años",
-                    help="Edad promedio de los inmuebles cercanos según el año de construcción catastral."
-                )
-                if ant_cat <= 15:
-                    st.success("Zona con construcciones recientes.")
-                elif ant_cat <= 40:
-                    st.info("Zona con construcciones de edad media.")
-                else:
-                    st.warning("Zona con construcciones antiguas.")
-
-        with cr3_col2:
-            st.metric(
-                "📊 Precio base del submercado",
-                f"${precio_base_total:,.0f} MXN",
-                help=(
-                    "Precio estimado para una vivienda completamente promedio "
-                    "dentro de este clúster de mercado, calculado a partir del "
-                    "intercepto del modelo ElasticNet. "
-                    "No incluye ningún ajuste por atributos específicos del inmueble. "
-                    "Sirve como referencia: si el Precio Estimado es mayor, "
-                    "la vivienda tiene características que la valorizan por encima "
-                    "del promedio de su submercado."
-                )
-            )
-            delta_vs_base = precio - precio_base_total
-            if delta_vs_base >= 0:
-                st.success(f"▲ +${delta_vs_base:,.0f} MXN sobre el precio base")
-            else:
-                st.warning(f"▼ ${delta_vs_base:,.0f} MXN bajo el precio base")
-
-        st.caption("Fuente: Catastro CDMX 2021 · Radio de análisis: 200 m.")
-
-    st.markdown("<br>", unsafe_allow_html=True)
-
-    # --- Bloque 5: Estructura urbana y desempeño ---
-    st.markdown("### 📊 5. Estructura Urbana y Desempeño del Mercado")
-
-    with st.container(border=True):
-        c4_1, c4_2, c4_3 = st.columns(3)
-
-        with c4_1:
-            marginalidad = int(datos_colonia.get("marginalidad_score", 3))
-            st.metric("📉 Índice de Rezago Social", f"{marginalidad} / 5")
-            if marginalidad <= 2:   st.success("Estrato medio-alto / alto.")
-            elif marginalidad <= 3: st.info("Estrato medio.")
-            else:                   st.error("Condiciones de vulnerabilidad social.")
-            st.caption("Marco metodológico CONAPO.")
-
-        with c4_2:
-            listing = float(datos_colonia.get("listing_density_log", 0))
-            st.metric("🏢 Densidad Comercial Inmobiliaria", f"{listing:.2f} (Log)")
-            if listing >= 3:   st.success("Mercado con alta rotación.")
-            elif listing >= 1.5: st.info("Actividad de mercado regular.")
-            else:              st.warning("Baja tasa de transacciones.")
-            st.caption("Densidad logarítmica de listados activos.")
-
-        with c4_3:
-            centralidad_log = float(datos_colonia.get("dist_subcenter_log", 0))
-            centralidad_m   = np.expm1(centralidad_log)
-            st.metric("📍 Proximidad a Nodos de Empleo", fmt_dist(centralidad_m))
-            if centralidad_m <= 1000:   st.success("Alta centralidad económica.")
-            elif centralidad_m <= 3000: st.info("Distancia funcional a subcentros.")
-            else:                       st.warning("Ubicación periférica o habitacional.")
-            st.caption("Subcentros: Centro, Polanco, Santa Fe, Insurgentes, Del Valle, Reforma.")
-
-
-
-# ============================================================
-# INTERPRETABILIDAD HEDÓNICA
-# ============================================================
-st.markdown("### 💰 Elasticidad y Aportación de Atributos al Precio")
-
-NOMBRES_VARIABLES = {
-    "rooms":                        "Recámaras adicionales",
-    "bathrooms":                    "Baños completos",
-    "parking_spaces":               "Espacios de estacionamiento",
-    "area":                         "Metros cuadrados de construcción",
-    "antiguedad":                   "Años de antigüedad (log)",
-    "dist_metro_m":                 "Proximidad STC Metro (log)",
-    "density_metro":                "Concentración local de accesos al Metro",
-    "dist_metrobus_m":              "Proximidad Metrobús (log)",
-    "density_metrobus":             "Concentración de accesos al Metrobús",
-    "dist_tren_m":                  "Proximidad Tren Ligero (log)",
-    "density_tren":                 "Densidad Tren Ligero",
-    "dist_trole_m":                 "Proximidad Trolebús (log)",
-    "density_trole":                "Densidad Trolebús",
-    "dist_cable_m":                 "Proximidad Cablebús (log)",
-    "density_cable":                "Densidad Cablebús",
-    "dist_ciclovia_m":              "Distancia a red de ciclovías (log)",
-    "densidad_ciclovia_15m":        "Densidad infraestructura ciclista",
-    "dist_area_verde_m":            "Distancia a área verde (log)",
-    "densidad_parques_15m":         "Densidad de parques en 15 min",
-    "dist_salud_m":                 "Distancia a equipamiento médico (log)",
-    "acceso_salud_15m":             "Acceso a salud en 15 min",
-    "dist_escuela_m":               "Distancia a centros educativos (log)",
-    "acceso_educacion_15m":         "Acceso a educación en 15 min",
-    "comercio_density":             "Intensidad de comercios regionales (log)",
-    "marginalidad_score":           "Grado de marginación social",
-    "score_15min":                  "Puntaje 'Ciudad de 15 Minutos'",
-    "dist_subcenter_log":           "Distancia a distritos de empleo (log)",
-    "gentrification_index":         "Nivel de gentrificación (alcaldía)",
-    "listing_density_log":          "Presión del inventario inmobiliario",
-    "area_X_gentrif":               "Tamaño en zonas con alta plusvalía",
-    "15min_X_gentrif":              "Accesibilidad × Gentrificación",
-    "verde_marginalidad_ratio":      "Parques / Marginación (log)",
-    "educacion_marginalidad_ratio":  "Educación / Marginación (log)",
-    "uso_mixto":                    "Zona de uso de suelo mixto (HM)",
-    "pct_migrantes_turistas":       "% Migrantes / turistas (INEGI, log)",
-    "spatial_lag_price":            "Lag espacial de precios vecinos",
-    "precio_vecinal_local":         "Precio vecinal local promedio",
-    "lag_x_area":                   "Lag espacial × Área",
-    "cat_mean_valor_suelo_200m":        "Valor catastral suelo promedio 200 m",
-    "cat_mean_vus_200m":                "Valor unitario suelo catastral 200 m",
-    "cat_mean_antiguedad_200m":         "Antigüedad catastral promedio 200 m",
-    "cat_std_valor_suelo_200m":         "Varianza valor suelo catastral 200 m",
-    "cat_mean_ratio_construccion_200m": "Ratio construcción/terreno catastral",
-    "cat_density_predios_200m":         "Densidad predios catastro 200 m",
-}
-
-enet_model  = modelo_fit.named_steps["enet"]
-coeficientes = enet_model.coef_
-feat_names   = x_input.columns.tolist()
-
-impactos_pesos = []
-for idx, var in enumerate(feat_names):
-    val  = float(x_input[var].values[0]) if var in x_input.columns else 0.0
-    beta = coeficientes[idx] if idx < len(coeficientes) else 0.0
-    ref  = x_input[var].values[0] if x_input[var].values[0] != 0 else 1
-    impacto = precio * (np.exp(beta * (val / ref)) - 1)
-    if var in ["area", "area_X_gentrif"] and abs(impacto) > precio:
-        impacto = np.sign(impacto) * (precio * 0.4)
-    impactos_pesos.append(impacto)
-
-datos_impacto = pd.DataFrame({
-    "Variable_Interna": feat_names,
-    "Impacto_Pesos":    impactos_pesos
-})
-datos_impacto["Característica"] = (
-    datos_impacto["Variable_Interna"]
-    .map(NOMBRES_VARIABLES)
-    .fillna(datos_impacto["Variable_Interna"])
-)
-
-UMBRAL_IMPACTO = 15000
-datos_filtrados = datos_impacto[
-    datos_impacto["Impacto_Pesos"].abs() >= UMBRAL_IMPACTO
-].copy()
-datos_filtrados = datos_filtrados.sort_values("Impacto_Pesos", ascending=True)
-
-if not datos_filtrados.empty:
-    colores = [
-        "#EF553B" if v < 0 else "#00CC96"
-        for v in datos_filtrados["Impacto_Pesos"]
-    ]
-    fig_impacto = go.Figure()
-    fig_impacto.add_trace(go.Bar(
-        y=datos_filtrados["Característica"],
-        x=datos_filtrados["Impacto_Pesos"],
-        orientation="h",
-        marker_color=colores,
-        text=datos_filtrados["Impacto_Pesos"].apply(
-            lambda x: f"${x:,.0f} MXN" if x >= 0 else f"-${abs(x):,.0f} MXN"
-        ),
-        textposition="outside",
-        hovertemplate="<b>%{y}</b><br>Aportación: %{x:$,.2f} MXN<extra></extra>"
-    ))
-    fig_impacto.update_layout(
-        title=(
-            "<b>Factores Dominantes en la Formación del Precio</b>"
-            "<br><span style='font-size:12px;color:gray;'>"
-            "Impacto absoluto &gt; $15k MXN</span>"
-        ),
-        xaxis_title="Impacto Neto sobre el Valor Estimado ($ MXN)",
-        yaxis_title="",
-        margin=dict(l=25, r=80, t=70, b=25),
-        height=len(datos_filtrados) * 38 + 110,
-        showlegend=False,
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        xaxis=dict(
-            showgrid=True,
-            gridcolor="rgba(128,128,128,0.15)",
-            zeroline=True,
-            zerolinecolor="rgba(128,128,128,0.4)"
-        )
-    )
-    st.plotly_chart(fig_impacto, use_container_width=True)
-    st.info(
-        "💡 **Guía de Lectura:** Barras **verdes** → atributos que incrementan "
-        "la plusvalía. Barras **rojas** → penalizaciones por obsolescencia o "
-        "déficit de conectividad."
-    )
-else:
-    st.warning(
-        "No se identificaron variables con impacto superior a $15,000 MXN "
-        "en esta configuración de vivienda."
-    )
-
-# ============================================================
-# MAPA DE CONTEXTO
-# ============================================================
-import json
-
-RADIO_M = 1200
-
-CAPAS_CONFIG = {
-    "metro":       {"label": "🚇 STC Metro",     "color": "blue",      "icono": "train",          "prefix": "fa", "max_puntos": 30},
-    "metrobus":    {"label": "🚌 Metrobús",       "color": "red",       "icono": "bus",            "prefix": "fa", "max_puntos": 30},
-    "tren":        {"label": "🚊 Tren Ligero",    "color": "cadetblue", "icono": "subway",         "prefix": "fa", "max_puntos": 20},
-    "trolebus":    {"label": "🚎 Trolebús",       "color": "purple",    "icono": "bolt",           "prefix": "fa", "max_puntos": 30},
-    "cablebus":    {"label": "🚠 Cablebús",       "color": "darkblue",  "icono": "cloud",          "prefix": "fa", "max_puntos": 20},
-    "parques":     {"label": "🌳 Áreas Verdes",   "color": "green",     "icono": "leaf",           "prefix": "fa", "max_puntos": 25},
-    "salud":       {"label": "🏥 Salud",          "color": "darkred",   "icono": "plus-square",    "prefix": "fa", "max_puntos": 20},
-    "comercio":    {"label": "🛍️ Comercio",      "color": "orange",    "icono": "shopping-cart",  "prefix": "fa", "max_puntos": 15},
-    "esc_privada": {"label": "🏫 Esc. Privadas", "color": "beige",     "icono": "graduation-cap", "prefix": "fa", "max_puntos": 20},
-    "esc_publica": {"label": "🏫 Esc. Públicas", "color": "darkgreen", "icono": "graduation-cap", "prefix": "fa", "max_puntos": 20},
-    "ciclovias":   {"label": "🚲 Ciclovías",      "color": "teal",      "icono": "road",           "prefix": "fa", "max_puntos": 20},
-}
-
-_COLOR_HEX = {
-    "blue": "#1A73E8", "red": "#E53935", "cadetblue": "#5F9EA0",
-    "purple": "#7B1FA2", "darkblue": "#1565C0", "green": "#388E3C",
-    "darkred": "#B71C1C", "orange": "#F57C00", "beige": "#A1887F",
-    "darkgreen": "#1B5E20", "teal": "#008080",
-}
-
-def _latlon_a_utm_mapa(lat, lon):
-    gdf = gpd.GeoDataFrame(
-        geometry=gpd.points_from_xy([lon], [lat]), crs="EPSG:4326"
-    ).to_crs("EPSG:32614")
-    return gdf.geometry.iloc[0].x, gdf.geometry.iloc[0].y
-
-def _utm_a_latlon_mapa(pts_utm):
-    if len(pts_utm) == 0:
-        return []
-    gdf = gpd.GeoDataFrame(
-        geometry=gpd.points_from_xy(pts_utm[:, 0], pts_utm[:, 1]),
-        crs="EPSG:32614"
-    ).to_crs("EPSG:4326")
-    return [(g.y, g.x) for g in gdf.geometry]
-
-poligono_colonia_geojson = POLIGONOS_COLONIAS.get(colonia_sel, None)
-poligono_js = json.dumps(poligono_colonia_geojson) if poligono_colonia_geojson else "null"
-
-# Construcción del mapa
-m = folium.Map(
-    location=[lat_marcador, lon_marcador],
-    zoom_start=15,
-    tiles="OpenStreetMap",
-)
-
-# Polígono de la colonia
-if poligono_colonia_geojson:
-    folium.GeoJson(
-        poligono_colonia_geojson,
-        style_function=lambda _: {
-            "color":       "#1A73E8",
-            "weight":      2.5,
-            "fillColor":   "#1A73E8",
-            "fillOpacity": 0.06,
-            "dashArray":   "6 4",
-        },
-        tooltip="Límite de la colonia",
-    ).add_to(m)
-
-lat_actual = st.session_state[_key_lat]
-lon_actual = st.session_state[_key_lon]
-
-# Círculo de radio (actualizado con el punto actual)
-folium.Circle(
-    location=[lat_actual, lon_actual],
-    radius=RADIO_M,
-    color="#E53935",
-    weight=2,
-    fill=True,
-    fill_color="#E53935",
-    fill_opacity=0.05,
-    tooltip=f"Radio de análisis: {RADIO_M/1000:.1f} km | {'Confirmado' if punto_confirmado else 'Centroide'}",
-).add_to(m)
-
-
-# Marcador fijo que muestra la posición actual confirmada (no arrastrable)
-folium.Marker(
-    location=[lat_actual, lon_actual],
-    icon=folium.Icon(color="red", icon="home", prefix="fa"),
-    tooltip="📍 Posición actual — usa el botón ✏️ (izquierda) para colocar un nuevo marcador",
-    popup=folium.Popup(
-        f"<b>📍 Punto de análisis</b><br>"
-        f"Colonia: <b>{colonia_sel.title()}</b><br>"
-        f"<span style='font-size:10px;color:#888'>"
-        f"Usa la herramienta de marcador (🔵 en el panel izquierdo)<br>"
-        f"para colocar un nuevo punto, luego presiona <b>Confirmar ubicación</b></span>",
-        max_width=240,
-    ),
-    draggable=False,
-).add_to(m)
-
-# Plugin Draw: solo marcadores, para capturar nueva posición confiablemente
-# via last_active_drawing con geometría tipo Point
-from folium.plugins import Draw
-Draw(
-    draw_options={
-        "marker":       True,
-        "polyline":     False,
-        "polygon":      False,
-        "circle":       False,
-        "rectangle":    False,
-        "circlemarker": False,
-    },
-    edit_options={"edit": False, "remove": False},
-    position="topleft",
-).add_to(m)
-
-# Capas de servicios (puntos)
-centro_utm = _latlon_a_utm_mapa(lat_actual, lon_actual)
-resumen_capas = {}
-
-for clave, (pts_utm, nombres) in CAPAS_SERVICIOS.items():
-    cfg = CAPAS_CONFIG[clave]
-    if len(pts_utm) == 0:
-        resumen_capas[clave] = 0
-        continue
-
-    tree = cKDTree(pts_utm)
-    idx  = tree.query_ball_point(centro_utm, r=RADIO_M)
-
-    if not idx:
-        resumen_capas[clave] = 0
-        continue
-
-    pts_dentro     = pts_utm[idx]
-    nombres_dentro = [nombres[i] for i in idx] if nombres else []
-    total          = len(pts_dentro)
-    resumen_capas[clave] = total
-
-    max_p = cfg["max_puntos"]
-    if total > max_p:
-        step           = max(1, total // max_p)
-        pts_dentro     = pts_dentro[::step][:max_p]
-        nombres_dentro = nombres_dentro[::step][:max_p]
-
-    coords_ll = _utm_a_latlon_mapa(pts_dentro)
-    grupo     = folium.FeatureGroup(name=cfg["label"], show=True)
-
-    for i, (lt, ln) in enumerate(coords_ll):
-        nombre_punto = nombres_dentro[i] if i < len(nombres_dentro) else f"{cfg['label']} #{i+1}"
-        folium.Marker(
-            location=[lt, ln],
-            icon=folium.Icon(
-                color=cfg["color"],
-                icon=cfg["icono"],
-                prefix=cfg["prefix"],
-            ),
-            tooltip=folium.Tooltip(nombre_punto, sticky=True),
-            popup=folium.Popup(
-                f"<b>{cfg['label']}</b><br>{nombre_punto}<br>"
-                f"<span style='font-size:10px;color:#888'>{lt:.5f}, {ln:.5f}</span>",
-                max_width=200,
-            ),
-        ).add_to(grupo)
-
-    grupo.add_to(m)
-
-# Capa de líneas: ciclovías
-_cic_utm = CAPAS_LINEAS.get("ciclovias_utm", gpd.GeoDataFrame(geometry=[], crs="EPSG:32614"))
-_cic_wgs = CAPAS_LINEAS.get("ciclovias_wgs", gpd.GeoDataFrame(geometry=[], crs="EPSG:4326"))
-if not _cic_utm.empty:
-    _circulo_utm = Point(centro_utm[0], centro_utm[1]).buffer(RADIO_M)
-    # Usar mismo índice para ambos GDFs (tienen filas idénticas)
-    _mask = _cic_utm.intersects(_circulo_utm)
-    _cic_wgs_dentro = _cic_wgs[_mask]
-    if not _cic_wgs_dentro.empty:
-        resumen_capas["ciclovias"] = len(_cic_wgs_dentro)
-        grupo_lineas = folium.FeatureGroup(name="🚲 Ciclovías", show=True)
-        for _, row in _cic_wgs_dentro.iterrows():
-            nombre = str(row.get("NOMBRE", "") or "").strip()
-            if not nombre or nombre in ("nan", "None"):
-                nombre = "Ciclovía sin nombre"
-            if len(nombre) > 50:
-                nombre = nombre[:47] + "…"
-            folium.GeoJson(
-                row.geometry.__geo_interface__,
-                style_function=lambda feature: {"color": "#008080", "weight": 3, "opacity": 0.85},
-                tooltip=folium.Tooltip(f"🚲 {nombre}", sticky=True),
-                popup=folium.Popup(f"<b>Ciclovía</b><br>{nombre}", max_width=200),
-            ).add_to(grupo_lineas)
-        grupo_lineas.add_to(m)
-    else:
-        resumen_capas["ciclovias"] = 0
-else:
-    resumen_capas["ciclovias"] = 0
-    
-# LayerControl
-folium.LayerControl(collapsed=True, position="topright").add_to(m)
-
-# Leyenda
-leyenda_filas = "".join([
-    f"<div style='display:flex;align-items:center;margin-bottom:6px;'>"
-    f"<span style='background:{_COLOR_HEX[cfg['color']]};width:13px;height:13px;"
-    f"border-radius:50%;display:inline-block;margin-right:8px;"
-    f"border:1px solid rgba(0,0,0,0.15);flex-shrink:0;'></span>"
-    f"<span style='font-size:12px;color:#222;line-height:1.3;'>{cfg['label']}</span></div>"
-    for clave, cfg in CAPAS_CONFIG.items()
+tab_valuador, tab_atlas = st.tabs([
+    "🏢 Valuador Interactivo",
+    "🗺️ Estudio Multidimensional del Mercado Inmobiliario"
 ])
 
-leyenda_html = f"""
-<div style="
-    position: fixed;
-    bottom: 30px; left: 30px;
-    z-index: 9999;
-    background: rgba(255,255,255,0.97);
-    border: 1px solid #ccc;
-    border-radius: 10px;
-    padding: 12px 16px;
-    box-shadow: 0 2px 12px rgba(0,0,0,0.18);
-    font-family: 'Segoe UI', Arial, sans-serif;
-    min-width: 175px;
-">
-    <div style='font-weight:700;font-size:13px;margin-bottom:9px;color:#111;
-                border-bottom:1px solid #eee;padding-bottom:6px;'>
-        Servicios en radio 1.2 km
-    </div>
-    {leyenda_filas}
-    <div style='margin-top:8px;padding-top:6px;border-top:1px solid #eee;
-                font-size:10px;color:#666;'>
-        🔴 Límite de la colonia
-    </div>
-</div>
-"""
-m.get_root().html.add_child(folium.Element(leyenda_html))
+with tab_valuador:
 
-# Render en Streamlit
-st.subheader("🗺️ Entorno Urbano — Radio 1.2 km")
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Precio Estimado Comercial",  f"${precio:,.0f} MXN")
+    c2.metric("Valor Unitario (m²)",        f"${precio_m2:,.0f} MXN/m²")
+    c3.metric("Segmento / Clúster",
+            f"{'Lujo' if seg_label == 'lujo' else 'Estándar'} · C{cluster_id}")
+    c4.metric("Índice de Gentrificación",
+            round(datos_colonia.get("gentrification_index", 0), 3))
 
-if punto_confirmado:
-    st.success(
-        f"✅ Punto confirmado en {lat_marcador:.5f}, {lon_marcador:.5f} — "
-        f"distancias y precio recalculados."
+    def fmt_dist(m):
+        return f"{m:.0f} m" if m < 1000 else f"{m/1000:.1f} km"
+
+    # ============================================================
+    # PANEL DE ANÁLISIS DE ENTORNO URBANO
+    # ============================================================
+    with st.expander("🌎 Análisis de Entorno Urbano y Socioespacial",
+                    expanded=True):
+
+        # --- Bloque 1: Ciudad de 15 Minutos ---
+        st.markdown("### 🏬 1. Accesibilidad a Escala Humana (Ciudad de 15 Minutos)")
+
+        with st.container(border=True):
+            score_15   = float(datos_entorno.get("score_15min", 0))
+            c_score, c_prog = st.columns([1, 3])
+            with c_score:
+                st.metric("🎯 Índice General 15 Min", round(score_15, 3))
+            with c_prog:
+                st.markdown("<div style='padding-top:10px;'></div>",
+                            unsafe_allow_html=True)
+                st.progress(min(score_15, 1.0))
+                if score_15 >= 0.7:   st.success("Alta cobertura peatonal.")
+                elif score_15 >= 0.4: st.info("Cobertura urbana funcional.")
+                else:                  st.warning("Dependencia de vehículo.")
+
+            st.markdown("---")
+
+            fila1_col1, fila1_col2 = st.columns(2)
+            fila2_col1, fila2_col2 = st.columns(2)
+
+            with fila1_col1:
+                acceso_salud = float(datos_entorno.get("acceso_salud_15m", 0))
+                st.metric("🏥 Servicios de Salud Cercanos",
+                        f"{acceso_salud:.0f} Unidades")
+                if acceso_salud >= 6:   st.success("Alta densidad médica.")
+                elif acceso_salud >= 2: st.info("Cobertura hospitalaria básica.")
+                else:                   st.warning("Déficit de equipamiento médico.")
+                st.caption("Estructura unificada y depurada.")
+
+            with fila1_col2:
+                acceso_edu = float(datos_entorno.get("acceso_educacion_15m", 0))
+                st.metric("📚 Planteles Educativos", f"{acceso_edu:.0f} Escuelas")
+                if acceso_edu >= 40:   st.success("Alta oferta escolar.")
+                elif acceso_edu >= 15: st.info("Infraestructura escolar suficiente.")
+                else:                  st.warning("Disponibilidad local limitada.")
+                st.caption("Búfer operativo de 1.2 km.")
+
+            with fila2_col1:
+                parque     = float(datos_entorno.get("dist_area_verde_recreativa_m",
+                        datos_entorno.get("dist_area_verde_m", 9999)))
+                dens_parques = float(datos_entorno.get("densidad_parques_15m", 0))
+                st.metric("🌳 Espacio Público Recreativo", f"{parque:.0f} m")
+                if parque <= 300:   st.success("Radio óptimo de proximidad.")
+                elif parque <= 800: st.info("Distancia media de acceso.")
+                else:               st.warning("Déficit de áreas verdes.")
+                st.caption(f"Aprox. {dens_parques:.0f} espacios verdes detectados.")
+
+            with fila2_col2:
+                comercio_dist = float(datos_entorno.get("dist_comercio_m", 5000))
+                st.metric("🛍️ Centros de Abasto / Comercio", fmt_dist(comercio_dist))
+                if comercio_dist <= 600:   st.success("Abasto local inmediato.")
+                elif comercio_dist <= 1500: st.info("Proximidad comercial aceptable.")
+                else:                       st.warning("Distancia prolongada a zonas comerciales.")
+
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        # --- Bloque 2: Transporte ---
+        st.markdown("### 🚊 2. Conectividad y Red de Transporte Estructurado")
+
+        with st.container(border=True):
+            c2_izquierda, c2_derecha = st.columns([3, 1.2])
+
+            d_metro  = float(datos_entorno.get("dist_metro_m",    9999))
+            d_mb     = float(datos_entorno.get("dist_metrobus_m", 9999))
+            d_tren   = float(datos_entorno.get("dist_tren_m",     9999))
+            d_trole  = float(datos_entorno.get("dist_trole_m",    9999))
+            d_cable  = float(datos_entorno.get("dist_cable_m",    9999))
+            ciclovias = float(datos_entorno.get("densidad_ciclovia_15m", 0))
+
+            with c2_izquierda:
+                sub_c1, sub_c2, sub_c3 = st.columns(3)
+                with sub_c1:
+                    st.metric("🚇 STC Metro",  fmt_dist(d_metro))
+                    st.markdown("<div style='padding-top:15px;'></div>",
+                                unsafe_allow_html=True)
+                    st.metric("🚌 Metrobús",   fmt_dist(d_mb))
+                with sub_c2:
+                    st.metric("🚊 Tren Ligero", fmt_dist(d_tren))
+                    st.markdown("<div style='padding-top:15px;'></div>",
+                                unsafe_allow_html=True)
+                    st.metric("🚎 Trolebús",   fmt_dist(d_trole))
+                with sub_c3:
+                    st.metric("🚠 Cablebús",   fmt_dist(d_cable))
+                    st.markdown("<div style='padding-top:15px;'></div>",
+                                unsafe_allow_html=True)
+                    if ciclovias >= 5.0:        status_bici = "Excelente"
+                    elif ciclovias >= 1.5:      status_bici = "Funcional"
+                    elif ciclovias > 0:         status_bici = "Escasa"
+                    else:                       status_bici = "Ninguna"
+                    st.metric("🚲 Infraestructura Ciclista", status_bici,
+                            help=f"{ciclovias:.1f} segmentos en radio 15 min.")
+
+            with c2_derecha:
+                min_dist = min([d_metro, d_mb, d_tren, d_trole])
+                st.markdown(
+                    "<b style='font-size:14px;color:#808495;'>Evaluación Multimodal</b>",
+                    unsafe_allow_html=True
+                )
+                if min_dist <= 500:
+                    st.success("🟢 **Conectividad Excelente**")
+                elif min_dist <= 1000:
+                    st.info("🔵 **Accesibilidad Media**")
+                else:
+                    st.warning("🟡 **Cobertura Restringida**")
+
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        # --- Bloque 3: Gentrificación ---
+        st.markdown("### 🏙️ 3. Dinámica de Transformación Socioespacial")
+
+        with st.container(border=True):
+            c3_1, c3_2, c3_3 = st.columns(3)
+
+            gentrif_macro = float(datos_colonia.get("gentrification_index", 0))
+            gentrif_micro = float(datos_colonia.get("gentrif_local_presion", 0))
+            gentrif_map   = float(datos_colonia.get("gentrif_map_score",     0))
+
+            with c3_1:
+                st.metric("🏛️ Cambio Estructural (Alcaldía)", round(gentrif_macro, 3))
+                st.progress(min(gentrif_macro, 1.0))
+                st.caption("Deltas socioeconómicos intercensales (INEGI 2010–2020)")
+
+            with c3_2:
+                st.metric("🏘️ Presión de Mercado Local", round(gentrif_micro, 3))
+                st.progress(min(gentrif_micro, 1.0))
+                st.caption("Variaciones de valor respecto al entorno continuo")
+
+            with c3_3:
+                st.metric("🌆 Vulnerabilidad al Cambio Socioespacial",
+                        round(gentrif_map, 3))
+                st.progress(min(gentrif_map, 1.0))
+                if gentrif_map >= 0.7:
+                    st.warning("Proceso acelerado de transformación.")
+                elif gentrif_map >= 0.4:
+                    st.info("Área en transición urbana activa.")
+                else:
+                    st.success("Estabilidad sociodemográfica relativa.")
+
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        # --- Bloque 4: Variables Catastrales ---
+        st.markdown("### 🗂️ 4. Contexto Catastral del Entorno (Radio 200 m)")
+
+        with st.container(border=True):
+
+            # Fila 1: precio oficial del suelo | valor catastral del terreno
+            cr1_col1, cr1_col2 = st.columns(2)
+
+            with cr1_col1:
+                vus = datos_colonia.get("cat_mean_vus_200m", None)
+                if vus is not None:
+                    st.metric(
+                        "📐 Precio oficial del suelo (m²)",
+                        f"${vus:,.0f} MXN/m²",
+                        help="Valor unitario de suelo según el Catastro CDMX 2021."
+                    )
+
+            with cr1_col2:
+                vs = datos_colonia.get("cat_mean_valor_suelo_200m", None)
+                if vs is not None:
+                    st.metric(
+                        "🏦 Valor catastral del terreno",
+                        f"${vs:,.0f} MXN",
+                        help="Valor total de suelo registrado por predio en el catastro."
+                    )
+
+            st.markdown("---")
+
+            # Fila 2: ¿qué tan construida está la zona? | ¿cuántos predios hay cerca?
+            cr2_col1, cr2_col2 = st.columns(2)
+
+            with cr2_col1:
+                ratio = datos_colonia.get("cat_mean_ratio_construccion_200m", None)
+                if ratio is not None:
+                    if ratio >= 3.0:
+                        ratio_label = "Zona muy edificada"
+                        ratio_desc  = "Predominan edificios de varios pisos."
+                        ratio_color = "success"
+                    elif ratio >= 1.5:
+                        ratio_label = "Zona medianamente edificada"
+                        ratio_desc  = "Mezcla de casas y edificios de baja altura."
+                        ratio_color = "info"
+                    else:
+                        ratio_label = "Zona poco edificada"
+                        ratio_desc  = "Predominan casas o predios con poca construcción."
+                        ratio_color = "warning"
+
+                    st.metric(
+                        "🏗️ ¿Qué tan construida está la zona?",
+                        f"{ratio:.1f}× el terreno",
+                        help=(
+                            "Indica cuántos metros cuadrados de construcción existen "
+                            "por cada metro cuadrado de terreno en los predios cercanos. "
+                            "Ejemplo: un valor de 2.5 significa que se construyó 2.5 veces "
+                            "la superficie del terreno (típico de edificios de 3 o más pisos). "
+                            "Un valor cercano a 1 indica casas de un solo nivel."
+                        )
+                    )
+                    if ratio_color == "success":
+                        st.success(f"🏢 {ratio_label} — {ratio_desc}")
+                    elif ratio_color == "info":
+                        st.info(f"🏠 {ratio_label} — {ratio_desc}")
+                    else:
+                        st.warning(f"🌿 {ratio_label} — {ratio_desc}")
+
+            with cr2_col2:
+                dens = datos_colonia.get("cat_density_predios_200m", None)
+                if dens is not None:
+                    if dens >= 80:
+                        dens_label = "Zona muy fraccionada"
+                        dens_desc  = "Muchos predios pequeños, alta densidad urbana."
+                        dens_color = "success"
+                    elif dens >= 30:
+                        dens_label = "Zona consolidada"
+                        dens_desc  = "Tejido urbano típico de colonia establecida."
+                        dens_color = "info"
+                    else:
+                        dens_label = "Zona poco parcelada"
+                        dens_desc  = "Predios grandes o área en proceso de urbanización."
+                        dens_color = "warning"
+
+                    st.metric(
+                        "🏘️ ¿Cuántos predios hay cerca?",
+                        f"{dens:.0f} predios en 200 m",
+                        help=(
+                            "Número de predios catastrados dentro de un radio de 200 metros. "
+                            "Un número alto indica una zona muy urbanizada con lotes pequeños "
+                            "(como el Centro Histórico o Tepito). Un número bajo puede indicar "
+                            "predios grandes, zonas industriales o colonias en desarrollo."
+                        )
+                    )
+                    if dens_color == "success":
+                        st.success(f"🏙️ {dens_label} — {dens_desc}")
+                    elif dens_color == "info":
+                        st.info(f"📌 {dens_label} — {dens_desc}")
+                    else:
+                        st.warning(f"🌱 {dens_label} — {dens_desc}")
+
+            st.markdown("---")
+
+            # Fila 3: antigüedad catastral | precio base del submercado
+            cr3_col1, cr3_col2 = st.columns(2)
+
+            with cr3_col1:
+                ant_cat = datos_colonia.get("cat_mean_antiguedad_200m", None)
+                if ant_cat is not None:
+                    st.metric(
+                        "📅 Antigüedad promedio de las construcciones",
+                        f"{ant_cat:.0f} años",
+                        help="Edad promedio de los inmuebles cercanos según el año de construcción catastral."
+                    )
+                    if ant_cat <= 15:
+                        st.success("Zona con construcciones recientes.")
+                    elif ant_cat <= 40:
+                        st.info("Zona con construcciones de edad media.")
+                    else:
+                        st.warning("Zona con construcciones antiguas.")
+
+            with cr3_col2:
+                st.metric(
+                    "📊 Precio base del submercado",
+                    f"${precio_base_total:,.0f} MXN",
+                    help=(
+                        "Precio estimado para una vivienda completamente promedio "
+                        "dentro de este clúster de mercado, calculado a partir del "
+                        "intercepto del modelo ElasticNet. "
+                        "No incluye ningún ajuste por atributos específicos del inmueble. "
+                        "Sirve como referencia: si el Precio Estimado es mayor, "
+                        "la vivienda tiene características que la valorizan por encima "
+                        "del promedio de su submercado."
+                    )
+                )
+                delta_vs_base = precio - precio_base_total
+                if delta_vs_base >= 0:
+                    st.success(f"▲ +${delta_vs_base:,.0f} MXN sobre el precio base")
+                else:
+                    st.warning(f"▼ ${delta_vs_base:,.0f} MXN bajo el precio base")
+
+            st.caption("Fuente: Catastro CDMX 2021 · Radio de análisis: 200 m.")
+
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        # --- Bloque 5: Estructura urbana y desempeño ---
+        st.markdown("### 📊 5. Estructura Urbana y Desempeño del Mercado")
+
+        with st.container(border=True):
+            c4_1, c4_2, c4_3 = st.columns(3)
+
+            with c4_1:
+                marginalidad = int(datos_colonia.get("marginalidad_score", 3))
+                st.metric("📉 Índice de Rezago Social", f"{marginalidad} / 5")
+                if marginalidad <= 2:   st.success("Estrato medio-alto / alto.")
+                elif marginalidad <= 3: st.info("Estrato medio.")
+                else:                   st.error("Condiciones de vulnerabilidad social.")
+                st.caption("Marco metodológico CONAPO.")
+
+            with c4_2:
+                listing = float(datos_colonia.get("listing_density_log", 0))
+                st.metric("🏢 Densidad Comercial Inmobiliaria", f"{listing:.2f} (Log)")
+                if listing >= 3:   st.success("Mercado con alta rotación.")
+                elif listing >= 1.5: st.info("Actividad de mercado regular.")
+                else:              st.warning("Baja tasa de transacciones.")
+                st.caption("Densidad logarítmica de listados activos.")
+
+            with c4_3:
+                centralidad_log = float(datos_colonia.get("dist_subcenter_log", 0))
+                centralidad_m   = np.expm1(centralidad_log)
+                st.metric("📍 Proximidad a Nodos de Empleo", fmt_dist(centralidad_m))
+                if centralidad_m <= 1000:   st.success("Alta centralidad económica.")
+                elif centralidad_m <= 3000: st.info("Distancia funcional a subcentros.")
+                else:                       st.warning("Ubicación periférica o habitacional.")
+                st.caption("Subcentros: Centro, Polanco, Santa Fe, Insurgentes, Del Valle, Reforma.")
+
+
+
+    # ============================================================
+    # INTERPRETABILIDAD HEDÓNICA
+    # ============================================================
+    st.markdown("### 💰 Elasticidad y Aportación de Atributos al Precio")
+
+    NOMBRES_VARIABLES = {
+        "rooms":                        "Recámaras adicionales",
+        "bathrooms":                    "Baños completos",
+        "parking_spaces":               "Espacios de estacionamiento",
+        "area":                         "Metros cuadrados de construcción",
+        "antiguedad":                   "Años de antigüedad (log)",
+        "dist_metro_m":                 "Proximidad STC Metro (log)",
+        "density_metro":                "Concentración local de accesos al Metro",
+        "dist_metrobus_m":              "Proximidad Metrobús (log)",
+        "density_metrobus":             "Concentración de accesos al Metrobús",
+        "dist_tren_m":                  "Proximidad Tren Ligero (log)",
+        "density_tren":                 "Densidad Tren Ligero",
+        "dist_trole_m":                 "Proximidad Trolebús (log)",
+        "density_trole":                "Densidad Trolebús",
+        "dist_cable_m":                 "Proximidad Cablebús (log)",
+        "density_cable":                "Densidad Cablebús",
+        "dist_ciclovia_m":              "Distancia a red de ciclovías (log)",
+        "densidad_ciclovia_15m":        "Densidad infraestructura ciclista",
+        "dist_area_verde_m":            "Distancia a área verde (log)",
+        "densidad_parques_15m":         "Densidad de parques en 15 min",
+        "dist_salud_m":                 "Distancia a equipamiento médico (log)",
+        "acceso_salud_15m":             "Acceso a salud en 15 min",
+        "dist_escuela_m":               "Distancia a centros educativos (log)",
+        "acceso_educacion_15m":         "Acceso a educación en 15 min",
+        "comercio_density":             "Intensidad de comercios regionales (log)",
+        "marginalidad_score":           "Grado de marginación social",
+        "score_15min":                  "Puntaje 'Ciudad de 15 Minutos'",
+        "dist_subcenter_log":           "Distancia a distritos de empleo (log)",
+        "gentrification_index":         "Nivel de gentrificación (alcaldía)",
+        "listing_density_log":          "Presión del inventario inmobiliario",
+        "area_X_gentrif":               "Tamaño en zonas con alta plusvalía",
+        "15min_X_gentrif":              "Accesibilidad × Gentrificación",
+        "verde_marginalidad_ratio":      "Parques / Marginación (log)",
+        "educacion_marginalidad_ratio":  "Educación / Marginación (log)",
+        "uso_mixto":                    "Zona de uso de suelo mixto (HM)",
+        "pct_migrantes_turistas":       "% Migrantes / turistas (INEGI, log)",
+        "spatial_lag_price":            "Lag espacial de precios vecinos",
+        "precio_vecinal_local":         "Precio vecinal local promedio",
+        "lag_x_area":                   "Lag espacial × Área",
+        "cat_mean_valor_suelo_200m":        "Valor catastral suelo promedio 200 m",
+        "cat_mean_vus_200m":                "Valor unitario suelo catastral 200 m",
+        "cat_mean_antiguedad_200m":         "Antigüedad catastral promedio 200 m",
+        "cat_std_valor_suelo_200m":         "Varianza valor suelo catastral 200 m",
+        "cat_mean_ratio_construccion_200m": "Ratio construcción/terreno catastral",
+        "cat_density_predios_200m":         "Densidad predios catastro 200 m",
+    }
+
+    enet_model  = modelo_fit.named_steps["enet"]
+    coeficientes = enet_model.coef_
+    feat_names   = x_input.columns.tolist()
+
+    impactos_pesos = []
+    for idx, var in enumerate(feat_names):
+        val  = float(x_input[var].values[0]) if var in x_input.columns else 0.0
+        beta = coeficientes[idx] if idx < len(coeficientes) else 0.0
+        ref  = x_input[var].values[0] if x_input[var].values[0] != 0 else 1
+        impacto = precio * (np.exp(beta * (val / ref)) - 1)
+        if var in ["area", "area_X_gentrif"] and abs(impacto) > precio:
+            impacto = np.sign(impacto) * (precio * 0.4)
+        impactos_pesos.append(impacto)
+
+    datos_impacto = pd.DataFrame({
+        "Variable_Interna": feat_names,
+        "Impacto_Pesos":    impactos_pesos
+    })
+    datos_impacto["Característica"] = (
+        datos_impacto["Variable_Interna"]
+        .map(NOMBRES_VARIABLES)
+        .fillna(datos_impacto["Variable_Interna"])
     )
-else:
-    st.info("📍 Arrastra el ícono 🏠 dentro de la colonia y confirma la ubicación.")
 
-# Contadores de servicios
-iconos_txt = {
-    "metro": "🚇", "metrobus": "🚌", "tren": "🚊", "trolebus": "🚎",
-    "cablebus": "🚠", "parques": "🌳", "salud": "🏥", "comercio": "🛍️",
-    "esc_privada": "🏫", "esc_publica": "🏫", "ciclovias": "🚲",
-}
-nombres_cortos = {
-    "metro": "Metro", "metrobus": "Metrobús", "tren": "Tren", "trolebus": "Trolebús",
-    "cablebus": "Cablebús", "parques": "Parques", "salud": "Salud", "comercio": "Comercio",
-    "esc_privada": "Esc. Priv.", "esc_publica": "Esc. Púb.", "ciclovias": "Ciclovías",
-}
+    UMBRAL_IMPACTO = 15000
+    datos_filtrados = datos_impacto[
+        datos_impacto["Impacto_Pesos"].abs() >= UMBRAL_IMPACTO
+    ].copy()
+    datos_filtrados = datos_filtrados.sort_values("Impacto_Pesos", ascending=True)
 
-cols_resumen = st.columns(len(resumen_capas))
-for col, (clave, n) in zip(cols_resumen, resumen_capas.items()):
-    col.metric(f"{iconos_txt[clave]} {nombres_cortos[clave]}", n)
-
-# ============================================================
-# RESULTADO DEL MAPA
-# ============================================================
-
-resultado_mapa = st_folium(
-    m,
-    use_container_width=True,
-    height=540,
-    key=f"mapa_{colonia_sel}",
-    returned_objects=["last_active_drawing"],  # SOLO dibujo, no clics en otros marcadores
-)
-
-# ============================================================
-# DETECTAR NUEVO PUNTO COLOCADO CON LA HERRAMIENTA DRAW
-# ============================================================
-
-from shapely.geometry import Point, shape
-
-_drawn = resultado_mapa.get("last_active_drawing")
-
-nuevo_lat, nuevo_lon = None, None
-
-# last_active_drawing → {"geometry": {"type": "Point", "coordinates": [lon, lat]}}
-if _drawn and isinstance(_drawn, dict):
-    _geom = _drawn.get("geometry", {})
-    if _geom.get("type") == "Point":
-        _coords = _geom.get("coordinates", [])
-        if len(_coords) == 2:
-            nuevo_lat = _coords[1]
-            nuevo_lon = _coords[0]
-
-if nuevo_lat is not None and nuevo_lon is not None:
-    poly_geojson = POLIGONOS_COLONIAS.get(colonia_sel)
-    _dentro = True
-    if poly_geojson is not None:
-        from shapely.geometry import Point as _Pt, shape as _shape
-        _poly = _shape(poly_geojson)
-        _dentro = _poly.contains(_Pt(nuevo_lon, nuevo_lat))
-
-    if _dentro:
-        if (
-            abs(nuevo_lat - st.session_state[_key_lat]) > 0.000001
-            or abs(nuevo_lon - st.session_state[_key_lon]) > 0.000001
-        ):
-            st.session_state[_key_lat] = nuevo_lat
-            st.session_state[_key_lon] = nuevo_lon
-            st.session_state[_key_confirmado] = False
-            st.rerun()
+    if not datos_filtrados.empty:
+        colores = [
+            "#EF553B" if v < 0 else "#00CC96"
+            for v in datos_filtrados["Impacto_Pesos"]
+        ]
+        fig_impacto = go.Figure()
+        fig_impacto.add_trace(go.Bar(
+            y=datos_filtrados["Característica"],
+            x=datos_filtrados["Impacto_Pesos"],
+            orientation="h",
+            marker_color=colores,
+            text=datos_filtrados["Impacto_Pesos"].apply(
+                lambda x: f"${x:,.0f} MXN" if x >= 0 else f"-${abs(x):,.0f} MXN"
+            ),
+            textposition="outside",
+            hovertemplate="<b>%{y}</b><br>Aportación: %{x:$,.2f} MXN<extra></extra>"
+        ))
+        fig_impacto.update_layout(
+            title=(
+                "<b>Factores Dominantes en la Formación del Precio</b>"
+                "<br><span style='font-size:12px;color:gray;'>"
+                "Impacto absoluto &gt; $15k MXN</span>"
+            ),
+            xaxis_title="Impacto Neto sobre el Valor Estimado ($ MXN)",
+            yaxis_title="",
+            margin=dict(l=25, r=80, t=70, b=25),
+            height=len(datos_filtrados) * 38 + 110,
+            showlegend=False,
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            xaxis=dict(
+                showgrid=True,
+                gridcolor="rgba(128,128,128,0.15)",
+                zeroline=True,
+                zerolinecolor="rgba(128,128,128,0.4)"
+            )
+        )
+        st.plotly_chart(fig_impacto, use_container_width=True)
+        st.info(
+            "💡 **Guía de Lectura:** Barras **verdes** → atributos que incrementan "
+            "la plusvalía. Barras **rojas** → penalizaciones por obsolescencia o "
+            "déficit de conectividad."
+        )
     else:
-        # NO hacer rerun — solo avisar. El marcador se redibujará en la posición
-        # válida de session_state en el próximo rerun natural (al confirmar).
-        st.warning("⚠️ Posición fuera de la colonia — no se actualizó. Mueve el marcador dentro del límite azul y confirma.")
+        st.warning(
+            "No se identificaron variables con impacto superior a $15,000 MXN "
+            "en esta configuración de vivienda."
+        )
+
+    # ============================================================
+    # MAPA DE CONTEXTO
+    # ============================================================
+    import json
+
+    RADIO_M = 1200
+
+    CAPAS_CONFIG = {
+        "metro":       {"label": "🚇 STC Metro",     "color": "blue",      "icono": "train",          "prefix": "fa", "max_puntos": 30},
+        "metrobus":    {"label": "🚌 Metrobús",       "color": "red",       "icono": "bus",            "prefix": "fa", "max_puntos": 30},
+        "tren":        {"label": "🚊 Tren Ligero",    "color": "cadetblue", "icono": "subway",         "prefix": "fa", "max_puntos": 20},
+        "trolebus":    {"label": "🚎 Trolebús",       "color": "purple",    "icono": "bolt",           "prefix": "fa", "max_puntos": 30},
+        "cablebus":    {"label": "🚠 Cablebús",       "color": "darkblue",  "icono": "cloud",          "prefix": "fa", "max_puntos": 20},
+        "parques":     {"label": "🌳 Áreas Verdes",   "color": "green",     "icono": "leaf",           "prefix": "fa", "max_puntos": 25},
+        "salud":       {"label": "🏥 Salud",          "color": "darkred",   "icono": "plus-square",    "prefix": "fa", "max_puntos": 20},
+        "comercio":    {"label": "🛍️ Comercio",      "color": "orange",    "icono": "shopping-cart",  "prefix": "fa", "max_puntos": 15},
+        "esc_privada": {"label": "🏫 Esc. Privadas", "color": "beige",     "icono": "graduation-cap", "prefix": "fa", "max_puntos": 20},
+        "esc_publica": {"label": "🏫 Esc. Públicas", "color": "darkgreen", "icono": "graduation-cap", "prefix": "fa", "max_puntos": 20},
+        "ciclovias":   {"label": "🚲 Ciclovías",      "color": "teal",      "icono": "road",           "prefix": "fa", "max_puntos": 20},
+    }
+
+    _COLOR_HEX = {
+        "blue": "#1A73E8", "red": "#E53935", "cadetblue": "#5F9EA0",
+        "purple": "#7B1FA2", "darkblue": "#1565C0", "green": "#388E3C",
+        "darkred": "#B71C1C", "orange": "#F57C00", "beige": "#A1887F",
+        "darkgreen": "#1B5E20", "teal": "#008080",
+    }
+
+    def _latlon_a_utm_mapa(lat, lon):
+        gdf = gpd.GeoDataFrame(
+            geometry=gpd.points_from_xy([lon], [lat]), crs="EPSG:4326"
+        ).to_crs("EPSG:32614")
+        return gdf.geometry.iloc[0].x, gdf.geometry.iloc[0].y
+
+    def _utm_a_latlon_mapa(pts_utm):
+        if len(pts_utm) == 0:
+            return []
+        gdf = gpd.GeoDataFrame(
+            geometry=gpd.points_from_xy(pts_utm[:, 0], pts_utm[:, 1]),
+            crs="EPSG:32614"
+        ).to_crs("EPSG:4326")
+        return [(g.y, g.x) for g in gdf.geometry]
+
+    poligono_colonia_geojson = POLIGONOS_COLONIAS.get(colonia_key_sel)
+    poligono_js = json.dumps(poligono_colonia_geojson) if poligono_colonia_geojson else "null"
+
+    # Construcción del mapa
+    m = folium.Map(
+        location=[lat_marcador, lon_marcador],
+        zoom_start=15,
+        tiles="OpenStreetMap",
+    )
+
+    # Polígono de la colonia
+    if poligono_colonia_geojson:
+        folium.GeoJson(
+            poligono_colonia_geojson,
+            style_function=lambda _: {
+                "color":       "#1A73E8",
+                "weight":      2.5,
+                "fillColor":   "#1A73E8",
+                "fillOpacity": 0.06,
+                "dashArray":   "6 4",
+            },
+            tooltip="Límite de la colonia",
+        ).add_to(m)
+
+    lat_actual = st.session_state[_key_lat]
+    lon_actual = st.session_state[_key_lon]
+
+    # Círculo de radio (actualizado con el punto actual)
+    folium.Circle(
+        location=[lat_actual, lon_actual],
+        radius=RADIO_M,
+        color="#E53935",
+        weight=2,
+        fill=True,
+        fill_color="#E53935",
+        fill_opacity=0.05,
+        tooltip=f"Radio de análisis: {RADIO_M/1000:.1f} km | {'Confirmado' if punto_confirmado else 'Centroide'}",
+    ).add_to(m)
+
+
+    # Marcador fijo que muestra la posición actual confirmada (no arrastrable)
+    folium.Marker(
+        location=[lat_actual, lon_actual],
+        icon=folium.Icon(color="red", icon="home", prefix="fa"),
+        tooltip="📍 Posición actual — usa el botón ✏️ (izquierda) para colocar un nuevo marcador",
+        popup=folium.Popup(
+            f"<b>📍 Punto de análisis</b><br>"
+            f"Colonia: <b>{colonia_sel.title()}</b><br>"
+            f"<span style='font-size:10px;color:#888'>"
+            f"Usa la herramienta de marcador (🔵 en el panel izquierdo)<br>"
+            f"para colocar un nuevo punto, luego presiona <b>Confirmar ubicación</b></span>",
+            max_width=240,
+        ),
+        draggable=False,
+    ).add_to(m)
+
+    # Plugin Draw: solo marcadores, para capturar nueva posición confiablemente
+    # via last_active_drawing con geometría tipo Point
+    from folium.plugins import Draw
+    Draw(
+        draw_options={
+            "marker":       True,
+            "polyline":     False,
+            "polygon":      False,
+            "circle":       False,
+            "rectangle":    False,
+            "circlemarker": False,
+        },
+        edit_options={"edit": False, "remove": False},
+        position="topleft",
+    ).add_to(m)
+
+    # Capas de servicios (puntos)
+    centro_utm = _latlon_a_utm_mapa(lat_actual, lon_actual)
+    resumen_capas = {}
+
+    for clave, (pts_utm, nombres) in CAPAS_SERVICIOS.items():
+        cfg = CAPAS_CONFIG[clave]
+        if len(pts_utm) == 0:
+            resumen_capas[clave] = 0
+            continue
+
+        tree = cKDTree(pts_utm)
+        idx  = tree.query_ball_point(centro_utm, r=RADIO_M)
+
+        if not idx:
+            resumen_capas[clave] = 0
+            continue
+
+        pts_dentro     = pts_utm[idx]
+        nombres_dentro = [nombres[i] for i in idx] if nombres else []
+        total          = len(pts_dentro)
+        resumen_capas[clave] = total
+
+        max_p = cfg["max_puntos"]
+        if total > max_p:
+            step           = max(1, total // max_p)
+            pts_dentro     = pts_dentro[::step][:max_p]
+            nombres_dentro = nombres_dentro[::step][:max_p]
+
+        coords_ll = _utm_a_latlon_mapa(pts_dentro)
+        grupo     = folium.FeatureGroup(name=cfg["label"], show=True)
+
+        for i, (lt, ln) in enumerate(coords_ll):
+            nombre_punto = nombres_dentro[i] if i < len(nombres_dentro) else f"{cfg['label']} #{i+1}"
+            folium.Marker(
+                location=[lt, ln],
+                icon=folium.Icon(
+                    color=cfg["color"],
+                    icon=cfg["icono"],
+                    prefix=cfg["prefix"],
+                ),
+                tooltip=folium.Tooltip(nombre_punto, sticky=True),
+                popup=folium.Popup(
+                    f"<b>{cfg['label']}</b><br>{nombre_punto}<br>"
+                    f"<span style='font-size:10px;color:#888'>{lt:.5f}, {ln:.5f}</span>",
+                    max_width=200,
+                ),
+            ).add_to(grupo)
+
+        grupo.add_to(m)
+
+    # Capa de líneas: ciclovías
+    _cic_utm = CAPAS_LINEAS.get("ciclovias_utm", gpd.GeoDataFrame(geometry=[], crs="EPSG:32614"))
+    _cic_wgs = CAPAS_LINEAS.get("ciclovias_wgs", gpd.GeoDataFrame(geometry=[], crs="EPSG:4326"))
+    if not _cic_utm.empty:
+        _circulo_utm = Point(centro_utm[0], centro_utm[1]).buffer(RADIO_M)
+        # Usar mismo índice para ambos GDFs (tienen filas idénticas)
+        _mask = _cic_utm.intersects(_circulo_utm)
+        _cic_wgs_dentro = _cic_wgs[_mask]
+        if not _cic_wgs_dentro.empty:
+            resumen_capas["ciclovias"] = len(_cic_wgs_dentro)
+            grupo_lineas = folium.FeatureGroup(name="🚲 Ciclovías", show=True)
+            for _, row in _cic_wgs_dentro.iterrows():
+                nombre = str(row.get("NOMBRE", "") or "").strip()
+                if not nombre or nombre in ("nan", "None"):
+                    nombre = "Ciclovía sin nombre"
+                if len(nombre) > 50:
+                    nombre = nombre[:47] + "…"
+                folium.GeoJson(
+                    row.geometry.__geo_interface__,
+                    style_function=lambda feature: {"color": "#008080", "weight": 3, "opacity": 0.85},
+                    tooltip=folium.Tooltip(f"🚲 {nombre}", sticky=True),
+                    popup=folium.Popup(f"<b>Ciclovía</b><br>{nombre}", max_width=200),
+                ).add_to(grupo_lineas)
+            grupo_lineas.add_to(m)
+        else:
+            resumen_capas["ciclovias"] = 0
+    else:
+        resumen_capas["ciclovias"] = 0
+        
+    # LayerControl
+    folium.LayerControl(collapsed=True, position="topright").add_to(m)
+
+    # Leyenda
+    leyenda_filas = "".join([
+        f"<div style='display:flex;align-items:center;margin-bottom:6px;'>"
+        f"<span style='background:{_COLOR_HEX[cfg['color']]};width:13px;height:13px;"
+        f"border-radius:50%;display:inline-block;margin-right:8px;"
+        f"border:1px solid rgba(0,0,0,0.15);flex-shrink:0;'></span>"
+        f"<span style='font-size:12px;color:#222;line-height:1.3;'>{cfg['label']}</span></div>"
+        for clave, cfg in CAPAS_CONFIG.items()
+    ])
+
+    leyenda_html = f"""
+    <div style="
+        position: fixed;
+        bottom: 30px; left: 30px;
+        z-index: 9999;
+        background: rgba(255,255,255,0.97);
+        border: 1px solid #ccc;
+        border-radius: 10px;
+        padding: 12px 16px;
+        box-shadow: 0 2px 12px rgba(0,0,0,0.18);
+        font-family: 'Segoe UI', Arial, sans-serif;
+        min-width: 175px;
+    ">
+        <div style='font-weight:700;font-size:13px;margin-bottom:9px;color:#111;
+                    border-bottom:1px solid #eee;padding-bottom:6px;'>
+            Servicios en radio 1.2 km
+        </div>
+        {leyenda_filas}
+        <div style='margin-top:8px;padding-top:6px;border-top:1px solid #eee;
+                    font-size:10px;color:#666;'>
+            🔴 Límite de la colonia
+        </div>
+    </div>
+    """
+    m.get_root().html.add_child(folium.Element(leyenda_html))
+
+    # Render en Streamlit
+    st.subheader("🗺️ Entorno Urbano — Radio 1.2 km")
+
+    if punto_confirmado:
+        st.success(
+            f"✅ Punto confirmado en {lat_marcador:.5f}, {lon_marcador:.5f} — "
+            f"distancias y precio recalculados."
+        )
+    else:
+        st.info("📍 Arrastra el ícono 🏠 dentro de la colonia y confirma la ubicación.")
+
+    # Contadores de servicios
+    iconos_txt = {
+        "metro": "🚇", "metrobus": "🚌", "tren": "🚊", "trolebus": "🚎",
+        "cablebus": "🚠", "parques": "🌳", "salud": "🏥", "comercio": "🛍️",
+        "esc_privada": "🏫", "esc_publica": "🏫", "ciclovias": "🚲",
+    }
+    nombres_cortos = {
+        "metro": "Metro", "metrobus": "Metrobús", "tren": "Tren", "trolebus": "Trolebús",
+        "cablebus": "Cablebús", "parques": "Parques", "salud": "Salud", "comercio": "Comercio",
+        "esc_privada": "Esc. Priv.", "esc_publica": "Esc. Púb.", "ciclovias": "Ciclovías",
+    }
+
+    cols_resumen = st.columns(len(resumen_capas))
+    for col, (clave, n) in zip(cols_resumen, resumen_capas.items()):
+        col.metric(f"{iconos_txt[clave]} {nombres_cortos[clave]}", n)
+
+    # ============================================================
+    # RESULTADO DEL MAPA
+    # ============================================================
+
+    resultado_mapa = st_folium(
+        m,
+        use_container_width=True,
+        height=540,
+        key=f"mapa_{colonia_sel}",
+        returned_objects=["last_active_drawing"],  # SOLO dibujo, no clics en otros marcadores
+    )
+
+    # ============================================================
+    # DETECTAR NUEVO PUNTO COLOCADO CON LA HERRAMIENTA DRAW
+    # ============================================================
+
+    from shapely.geometry import Point, shape
+
+    _drawn = resultado_mapa.get("last_active_drawing")
+
+    nuevo_lat, nuevo_lon = None, None
+
+    # last_active_drawing → {"geometry": {"type": "Point", "coordinates": [lon, lat]}}
+    if _drawn and isinstance(_drawn, dict):
+        _geom = _drawn.get("geometry", {})
+        if _geom.get("type") == "Point":
+            _coords = _geom.get("coordinates", [])
+            if len(_coords) == 2:
+                nuevo_lat = _coords[1]
+                nuevo_lon = _coords[0]
+
+    if nuevo_lat is not None and nuevo_lon is not None:
+        poly_geojson = POLIGONOS_COLONIAS.get(colonia_key_sel)
+        _dentro = True
+        if poly_geojson is not None:
+            from shapely.geometry import Point as _Pt, shape as _shape
+            _poly = _shape(poly_geojson)
+            _dentro = _poly.contains(_Pt(nuevo_lon, nuevo_lat))
+
+        if _dentro:
+            if (
+                abs(nuevo_lat - st.session_state[_key_lat]) > 0.000001
+                or abs(nuevo_lon - st.session_state[_key_lon]) > 0.000001
+            ):
+                st.session_state[_key_lat] = nuevo_lat
+                st.session_state[_key_lon] = nuevo_lon
+                st.session_state[_key_confirmado] = False
+                st.rerun()
+        else:
+            # NO hacer rerun — solo avisar. El marcador se redibujará en la posición
+            # válida de session_state en el próximo rerun natural (al confirmar).
+            st.warning("⚠️ Posición fuera de la colonia — no se actualizó. Mueve el marcador dentro del límite azul y confirma.")
+
+    # ============================================================
+    # POSICIÓN ACTUAL REAL DEL MARCADOR
+    # SIEMPRE LEER DESDE SESSION_STATE
+    # ============================================================
+
+    lat_actual = st.session_state[_key_lat]
+    lon_actual = st.session_state[_key_lon]
+
+    punto_confirmado = st.session_state[_key_confirmado]
+
+    # ============================================================
+    # BOTONES
+    # ============================================================
+
+    col_btn1, col_btn2, _ = st.columns([2, 2, 4])
+
+    with col_btn1:
+
+        if st.button(
+            "✅ Confirmar ubicación",
+            type="primary",
+            use_container_width=True
+        ):
+            st.session_state[_key_confirmado] = True
+            # Limpiar distancias cacheadas para que se recalculen con el punto actual
+            st.session_state[_key_dist] = None
+            st.rerun()
+
+    with col_btn2:
+
+        if st.button(
+            "↩️ Restablecer centroide",
+            use_container_width=True
+        ):
+
+            st.session_state[_key_lat] = lat_base
+            st.session_state[_key_lon] = lon_base
+
+            st.session_state[_key_confirmado] = False
+            st.session_state[_key_dist] = None
+
+            st.rerun()
+
+    # ============================================================
+    # TEXTO INFORMATIVO
+    # ============================================================
+
+    st.caption(
+        f"📐 Radio: {RADIO_M} m · "
+        f"Punto: {'confirmado ✅' if punto_confirmado else 'pendiente de confirmar'} · "
+        f"{lat_actual:.5f}, {lon_actual:.5f}"
+    )
 
 # ============================================================
-# POSICIÓN ACTUAL REAL DEL MARCADOR
-# SIEMPRE LEER DESDE SESSION_STATE
+# PESTAÑA: ESTUDIO MULTIDIMENSIONAL
 # ============================================================
+with tab_atlas:
 
-lat_actual = st.session_state[_key_lat]
-lon_actual = st.session_state[_key_lon]
+    # ── Encabezado ──────────────────────────────────────────
+    st.markdown("""
+    <div style="
+        background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+        border-radius: 16px;
+        padding: 2.5rem 2.5rem 2rem;
+        margin-bottom: 2rem;
+        box-shadow: 0 4px 24px rgba(0,0,0,0.3);
+    ">
+        <h1 style="
+            color: #e2e8f0;
+            font-size: 1.8rem;
+            font-weight: 800;
+            margin: 0 0 0.5rem;
+            letter-spacing: -0.5px;
+        ">🌆 Estudio Multidimensional del Mercado Inmobiliario</h1>
+        <p style="
+            color: #94a3b8;
+            font-size: 1rem;
+            margin: 0;
+            line-height: 1.6;
+        ">Análisis espacial integral de las dinámicas sociales, económicas y urbanas<br>
+        en la Ciudad de México · Elaborado con QGIS y datos abiertos CDMX</p>
+    </div>
+    """, unsafe_allow_html=True)
 
-punto_confirmado = st.session_state[_key_confirmado]
+    # ── Definición de mapas ──────────────────────────────────
+    # Ajusta la ruta base a donde guardes tus PNGs exportados de QGIS
+    MAPAS_DIR = os.path.join(PROJECT_ROOT, "..", "outputs", "assets", "mapas_qgis")
 
-# ============================================================
-# BOTONES
-# ============================================================
+    MAPAS_ATLAS = [
+        {
+            "archivo": "mapa_1_distribucion_del_precio_unitario_m2.png",
+            "titulo":  "Precio Real por Metro Cuadrado de Viviendas",
+            "emoji":   "💰",
+            "descripcion": "Distribución del precio por m² en el mercado de departamentos de la CDMX (rangos de $9k a $148k MXN). Revela los gradientes de valor desde el centro hacia la periferia y la concentración de oferta premium en Benito Juárez, Cuauhtémoc y Miguel Hidalgo.",
+            "categoria": "Mercado Inmobiliario",
+        },
+        {
+            "archivo": "mapa_2_densidad_de_oferta_inmobiliaria.png",
+            "titulo":  "Hotspot de Oferta Inmobiliaria (Publicaciones de Venta)",
+            "emoji":   "🏗️",
+            "descripcion": "Estimación de densidad kernel de los anuncios de venta activos. Los hotspots más intensos se concentran en Álvaro Obregón, Benito Juárez y Cuauhtémoc, evidenciando los submercados con mayor actividad transaccional.",
+            "categoria": "Mercado Inmobiliario",
+        },
+        {
+            "archivo": "mapa_3_identificacion_de_propiedades_de_lujo.png",
+            "titulo":  "Identificación de Propiedades de Lujo",
+            "emoji":   "🏆",
+            "descripcion": "Clasificación binaria del inventario analizado: vivienda convencional vs. vivienda de lujo (percentil ≥ 90 de precio por m²). La vivienda de lujo se concentra en el corredor Polanco–Lomas–Coyoacán.",
+            "categoria": "Mercado Inmobiliario",
+        },
+        {
+            "archivo": "mapa_4_rezago_espacial_de_precios.png",
+            "titulo":  "Rezago Espacial de Precios del Modelo",
+            "emoji":   "📊",
+            "descripcion": "Precio promedio ponderado de los vecinos más cercanos (spatial lag), desde entornos de precios bajos hasta hotspots inmobiliarios. Es el componente dinámico central del modelo hedónico-espacial ElasticNet.",
+            "categoria": "Análisis Espacial",
+        },
+        {
+            "archivo": "mapa_5_distribucion_espacial_del_valor_del_suelo_y_rezago_territorial.png",
+            "titulo":  "Comparación: Precio por m² vs Rezago Espacial",
+            "emoji":   "🗺️",
+            "descripcion": "Análisis bivariado que yuxtapone la distribución real del precio por m² (izquierda) con el rezago espacial del modelo (derecha). Permite detectar zonas donde el entorno vecinal presiona al alza o a la baja el valor individual.",
+            "categoria": "Análisis Espacial",
+        },
+        {
+            "archivo": "mapa_6_LISA.png",
+            "titulo":  "Clústeres Espaciales Significativos del Mercado Inmobiliario (LISA)",
+            "emoji":   "🔬",
+            "descripcion": "Local Indicators of Spatial Association (Moran's I local). Identifica clústeres HH (hotspot inmobiliario), LL (coldspot), HL (alta presión aislada) y LH (rezago aislado) con significancia estadística.",
+            "categoria": "Análisis Espacial",
+        },
+        {
+            "archivo": "mapa_7_el_entorno_catastral_activo.png",
+            "titulo":  "El Entorno Catastral Activo",
+            "emoji":   "🏛️",
+            "descripcion": "Nivel de actividad catastral por predio (desde muy baja hasta muy alta), cruzado con datos del SIGCDMX. La actividad catastral alta en Cuauhtémoc y Benito Juárez correlaciona con los submercados de mayor precio.",
+            "categoria": "Catastro",
+        },
+        {
+            "archivo": "mapa_8_indice_proximidad_15_minutos.png",
+            "titulo":  "Índice de Accesibilidad Territorial — Enfoque 15 Minutos",
+            "emoji":   "🚶",
+            "descripcion": "Score compuesto de accesibilidad peatonal que clasifica cada propiedad desde 'Desconectado / Periferia Crítica' hasta 'Entorno 15 Minutos Óptimo'. Las zonas verdes (óptimas) se concentran en Benito Juárez y Cuauhtémoc.",
+            "categoria": "Movilidad y Accesibilidad",
+        },
+        {
+            "archivo": "mapa_9_infrastructura_servicios_de_movilidad.png",
+            "titulo":  "Isócronas en Proximidad a Modos de Transporte Colectivo",
+            "emoji":   "🚇",
+            "descripcion": "Cuatro submapas (Metro, Metrobús, Trolebús, Cablebús) con isócronas de proximidad desde < 5 min caminando hasta entorno desconectado. El Metro y Metrobús muestran la mayor cobertura territorial.",
+            "categoria": "Movilidad y Accesibilidad",
+        },
+        {
+            "archivo": "mapa_10_indice_de_gentrificacion.png",
+            "titulo":  "Índice de Gentrificación",
+            "emoji":   "🏙️",
+            "descripcion": "Presencia del proceso de gentrificación por propiedad, desde 'Sin presión' hasta 'Gentrificación crítica'. La presión más intensa se concentra en Benito Juárez, Roma–Condesa y corredores de Coyoacán.",
+            "categoria": "Dinámicas Sociales",
+        },
+        {
+            "archivo": "mapa_11_analisis_bivariante_gentrificacion_vs_marginalidad.png",
+            "titulo":  "Análisis Bivariante: Gentrificación vs Marginalidad",
+            "emoji":   "📉",
+            "descripcion": "Matriz 3×3 que cruza nivel de gentrificación (Baja/Media/Alta) con nivel de marginalidad (Baja/Media/Alta). Las zonas con Alta Gentrificación + Alta Marginalidad representan los territorios de mayor vulnerabilidad socioespacial.",
+            "categoria": "Dinámicas Sociales",
+        },
+        {
+            "archivo": "mapa_12_presencia_de_migrantes.png",
+            "titulo":  "Presión por Población Migrante (≥ 5 años de residencia)",
+            "emoji":   "🌍",
+            "descripcion": "Clasificación de propiedades según la concentración de población migrante de larga estadía (Censo INEGI 2020): desde presencia insignificante hasta presión internacional crítica. Variable incorporada como factor de demanda en el modelo.",
+            "categoria": "Dinámicas Sociales",
+        },
+        {
+            "archivo": "mapa_13_segmentacion_de_submercados_kmeans.png",
+            "titulo":  "Clústeres Espaciales de Mercado (K-Means)",
+            "emoji":   "🧩",
+            "descripcion": "Segmentación mediante K-Means en 6 submercados diferenciados: 3 clústeres estándar (azules) y 3 de lujo (cálidos). Base del sistema de predicción segmentada — cada submercado entrena su propio modelo ElasticNet.",
+            "categoria": "Mercado Inmobiliario",
+        },
+        {
+            "archivo": "mapa_14_mapa_error_relativo.png",
+            "titulo":  "Análisis de Error Relativo — Nivel Colonia",
+            "emoji":   "⚠️",
+            "descripcion": "Error porcentual del modelo por colonia: subestimación (azul), error bajo, sobreestimación moderada/alta/extrema (rojo). Las zonas de mayor error coinciden con colonias de transición o con escasa muestra de entrenamiento.",
+            "categoria": "Validación del Modelo",
+        },
+        {
+            "archivo": "mapa_15_precio_predicho_del_modelo.png",
+            "titulo":  "Promedio de Precios Estimados del Modelo — Nivel Colonia",
+            "emoji":   "🎯",
+            "descripcion": "Precio total estimado por el modelo ElasticNet espacial agregado a nivel colonia (rangos de 1.4 M a 40 M MXN). Lomas de Chapultepec, Polanco y Bosques concentran las estimaciones más altas.",
+            "categoria": "Validación del Modelo",
+        },
+        {
+            "archivo": "mapa_16_gentrificacion_nivel_colonia.png",
+            "titulo":  "Índice de Gentrificación — Nivel Colonia",
+            "emoji":   "🏘️",
+            "descripcion": "Coroplético del índice de gentrificación desagregado por colonia: desde muy baja presión hasta consolidación. Iztaccihuatl, Morales/Polanco y las colonias Roma–Condesa muestran los procesos más avanzados.",
+            "categoria": "Dinámicas Sociales",
+        },
+        {
+            "archivo": "mapa_17_residuos_espaciales.png",
+            "titulo":  "Análisis de Residuos Espaciales: Diagnóstico de Error de Predicción",
+            "emoji":   "📐",
+            "descripcion": "Residuos del modelo clasificados en cinco categorías (Sobreestimación Significativa → Rango Óptimo → Subestimación Significativa). La distribución espacial de los residuos orienta mejoras futuras del modelo.",
+            "categoria": "Validación del Modelo",
+        },
+        {
+            "archivo": "mapa_18_gap_valor_plusvalia.png",
+            "titulo":  "Análisis Bivariado: Brecha de Valor y Accesibilidad a Servicios",
+            "emoji":   "📈",
+            "descripcion": "Interacción entre la brecha de valor (precio mercado vs. modelo base) y la cobertura de servicios. Identifica Nodos Consolidados (alto valor + alta cobertura), Oportunidades Emergentes y Zonas de Menor Interés.",
+            "categoria": "Análisis Espacial",
+        },
+        {
+            "archivo": "mapa_19_isocronas_servicios.png",
+            "titulo":  "Isócronas de Proximidad 15 Minutos",
+            "emoji":   "⏱️",
+            "descripcion": "Grado de servicios por proximidad peatonal: desde Déficit de Accesibilidad (morado oscuro) hasta Accesibilidad Excelente (amarillo). Roma Norte, Del Valle y Narvarte destacan como los entornos más completos.",
+            "categoria": "Movilidad y Accesibilidad",
+        },
+        {
+            "archivo": "mapa_20_accesibilidad_critica.png",
+            "titulo":  "Mapa de Desiertos Urbanos",
+            "emoji":   "🚨",
+            "descripcion": "Déficit de accesibilidad urbana por colonia, desde muy baja saturación hasta muy alta saturación de servicios. Las colonias en rojo oscuro concentran la mayor exclusión urbana, con impacto directo en la depresión del valor inmobiliario.",
+            "categoria": "Movilidad y Accesibilidad",
+        },
+    ]
 
-col_btn1, col_btn2, _ = st.columns([2, 2, 4])
+    # ── Filtro por categoría ─────────────────────────────────
+    categorias = sorted(set(m["categoria"] for m in MAPAS_ATLAS))
+    cat_sel = st.multiselect(
+        "🔍 Filtrar por categoría temática",
+        options=categorias,
+        default=categorias,
+        help="Selecciona una o más categorías para filtrar los mapas mostrados."
+    )
 
-with col_btn1:
+    mapas_filtrados = [m for m in MAPAS_ATLAS if m["categoria"] in cat_sel]
 
-    if st.button(
-        "✅ Confirmar ubicación",
-        type="primary",
-        use_container_width=True
-    ):
-        st.session_state[_key_confirmado] = True
-        # Limpiar distancias cacheadas para que se recalculen con el punto actual
-        st.session_state[_key_dist] = None
-        st.rerun()
+    if not mapas_filtrados:
+        st.warning("Selecciona al menos una categoría para ver los mapas.")
+    else:
+        # ── Colores por categoría ────────────────────────────
+        COLORES_CAT = {
+            "Mercado Inmobiliario":     ("#1e3a5f", "#3b82f6"),
+            "Análisis Espacial":        ("#1a3a2a", "#22c55e"),
+            "Catastro":                 ("#3a2a1a", "#f97316"),
+            "Movilidad y Accesibilidad":("#2a1a3a", "#a855f7"),
+            "Dinámicas Sociales":       ("#3a1a1a", "#ef4444"),
+            "Validación del Modelo":    ("#1a2a3a", "#06b6d4"),
+        }
 
-with col_btn2:
+        # ── Galería en cuadrícula de 2 columnas ─────────────
+        cols_galeria = st.columns(2, gap="large")
 
-    if st.button(
-        "↩️ Restablecer centroide",
-        use_container_width=True
-    ):
+        for i, mapa in enumerate(mapas_filtrados):
+            col = cols_galeria[i % 2]
+            ruta_img = os.path.join(MAPAS_DIR, mapa["archivo"])
 
-        st.session_state[_key_lat] = lat_base
-        st.session_state[_key_lon] = lon_base
+            bg_dark, accent = COLORES_CAT.get(mapa["categoria"], ("#1e293b", "#64748b"))
 
-        st.session_state[_key_confirmado] = False
-        st.session_state[_key_dist] = None
+            with col:
+                # Badge de categoría + título
+                st.markdown(f"""
+                <div style="
+                    background: {bg_dark};
+                    border: 1px solid {accent}40;
+                    border-left: 4px solid {accent};
+                    border-radius: 12px;
+                    padding: 1rem 1.2rem 0.7rem;
+                    margin-bottom: 0.5rem;
+                ">
+                    <span style="
+                        background: {accent}25;
+                        color: {accent};
+                        font-size: 0.7rem;
+                        font-weight: 700;
+                        letter-spacing: 0.08em;
+                        padding: 2px 10px;
+                        border-radius: 20px;
+                        text-transform: uppercase;
+                    ">{mapa['categoria']}</span>
+                    <h3 style="
+                        color: #f1f5f9;
+                        font-size: 1.05rem;
+                        font-weight: 700;
+                        margin: 0.5rem 0 0.3rem;
+                    ">{mapa['emoji']} {mapa['titulo']}</h3>
+                    <p style="
+                        color: #94a3b8;
+                        font-size: 0.85rem;
+                        margin: 0;
+                        line-height: 1.5;
+                    ">{mapa['descripcion']}</p>
+                </div>
+                """, unsafe_allow_html=True)
 
-        st.rerun()
+                # Imagen
+                if os.path.exists(ruta_img):
+                    st.image(
+                        ruta_img,
+                        use_container_width=True,
+                        caption=f"Mapa {i+1} de {len(mapas_filtrados)} · {mapa['titulo']}"
+                    )
+                else:
+                    st.markdown(f"""
+                    <div style="
+                        background: #1e293b;
+                        border: 2px dashed #334155;
+                        border-radius: 8px;
+                        padding: 3rem 1rem;
+                        text-align: center;
+                        color: #64748b;
+                        font-size: 0.9rem;
+                        margin-bottom: 1rem;
+                    ">
+                        📁 <code>{mapa['archivo']}</code><br>
+                        <small>Coloca el PNG exportado de QGIS en<br>
+                        <code>assets/mapas_qgis/</code></small>
+                    </div>
+                    """, unsafe_allow_html=True)
 
-# ============================================================
-# TEXTO INFORMATIVO
-# ============================================================
+                st.markdown("<div style='margin-bottom:1.5rem;'></div>",
+                            unsafe_allow_html=True)
 
-st.caption(
-    f"📐 Radio: {RADIO_M} m · "
-    f"Punto: {'confirmado ✅' if punto_confirmado else 'pendiente de confirmar'} · "
-    f"{lat_actual:.5f}, {lon_actual:.5f}"
-)
+        # ── Pie de sección ───────────────────────────────────
+        st.markdown("---")
+        st.caption(
+            f"📊 {len(mapas_filtrados)} mapas mostrados · "
+            f"Fuentes: INEGI, ADIP CDMX, STC Metro, SEMOVI · "
+            f"Elaboración propia con QGIS y Python"
+        )
