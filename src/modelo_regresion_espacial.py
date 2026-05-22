@@ -67,6 +67,10 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 warnings.filterwarnings("ignore")
 
+# Analítica Espacial Avanzada (Para el Índice de Moran)
+import libpysal
+from esda.moran import Moran
+
 # ======================================================
 # CONFIGURACIÓN DE EJECUCIÓN
 # ======================================================
@@ -1149,6 +1153,128 @@ print("3/7 FEATURES")
 print("="*80)
 
 df["price_m2_raw"] = df["price"] / df["area"]
+
+# ======================================================
+# CÁLCULO AISLADO DEL ÍNDICE DE MORAN (Solución Definitiva)
+# ======================================================
+print("="*80)
+print("ANÁLISIS DE AUTOCORRELACIÓN ESPACIAL (I DE MORAN)")
+print("="*80)
+
+try:
+    # 1. Asegurar correspondencia geométrica con los datos filtrados actuales
+    gdf_moran = gpd.GeoDataFrame(
+        df,
+        geometry=gpd.points_from_xy(df.longitud, df.latitud),
+        crs="EPSG:4326"
+    ).to_crs(epsg=32614)
+
+    # 2. Definir la variable de interés (Precio por metro cuadrado)
+    #    Eliminar NaN/Inf antes de calcular
+    gdf_moran = gdf_moran[
+        np.isfinite(gdf_moran["price_m2_raw"])
+    ].reset_index(drop=True)
+
+    y_moran = gdf_moran["price_m2_raw"].values.astype(float)
+
+    # 3. Construir la matriz de pesos espaciales (k-vecinos más cercanos)
+    w_knn = libpysal.weights.KNN.from_dataframe(gdf_moran, k=8)
+    w_knn.transform = 'R'  # Estandarización por filas
+
+    # 4. Calcular el Índice de Moran Global
+    moran_global = Moran(y_moran, w_knn)
+
+    # 5. Extraer valores de forma segura con np.asarray + float()
+    i_value  = float(np.asarray(moran_global.I).flat[0])
+    p_value  = float(np.asarray(moran_global.p_sim).flat[0])
+    z_native = float(np.asarray(moran_global.z_norm).flat[0])   # z_norm es el atributo correcto
+
+    # 6. Corregir consistencia de signo del Z-score
+    n_samples   = len(y_moran)
+    ei_teorico  = -1.0 / (n_samples - 1) if n_samples > 1 else 0.0
+    z_score     = abs(z_native) if i_value > ei_teorico else -abs(z_native)
+
+    # Imprimir resultados formateados
+    print(f"✓ Índice de Moran Global (I): {i_value:.4f}")
+    print(f"✓ p-valor del Índice:         {p_value:.4f}")
+    print(f"✓ Z-score:                    {z_score:.4f}")
+
+    # Interpretación rápida en consola
+    if p_value <= 0.05:
+        if i_value > 0:
+            print("Resultado: Autocorrelación espacial POSITIVA significativa (Clústeres de valores similares).")
+        else:
+            print("Resultado: Autocorrelación espacial NEGATIVA significativa (Dispersión espacial / tablero de ajedrez).")
+    else:
+        print("Resultado: No se detecta un patrón espacial significativo (Distribución aleatoria).")
+
+except Exception as e:
+    print(f"⚠ No se pudo calcular el Índice de Moran: {e}")
+print("="*80)
+
+# ======================================================
+# CORRELACIÓN: PRECIO CATASTRAL vs PRECIO UNITARIO POR ALCALDÍA
+# ======================================================
+print("\n" + "="*80)
+print("CORRELACIÓN CATASTRAL vs PRECIO DE MERCADO POR ALCALDÍA")
+print("="*80)
+
+try:
+    from scipy.stats import pearsonr, spearmanr
+
+    cols_cat_corr = [
+        "cat_mean_vus_200m",          # Valor unitario de suelo catastral (radio 200m)
+        "cat_mean_valor_suelo_200m",  # Valor total de suelo catastral (radio 200m)
+    ]
+
+    # Filtrar columnas que realmente existan en df
+    cols_disponibles = [c for c in cols_cat_corr if c in df.columns]
+
+    if not cols_disponibles:
+        print("⚠ No se encontraron columnas catastrales para correlacionar.")
+    else:
+        # Agrupar por alcaldía: promedio de precio de mercado y valor catastral
+        corr_df = (
+            df.groupby("alcaldia")[["price_m2_raw"] + cols_disponibles]
+            .median()   # Mediana: más robusta a outliers inmobiliarios
+            .dropna()
+            .reset_index()
+        )
+
+        print(f"\n→ Alcaldías con datos completos: {len(corr_df)}\n")
+
+        for col_cat in cols_disponibles:
+            # Solo filas sin NaN en el par de variables
+            par = corr_df[["price_m2_raw", col_cat]].dropna()
+
+            if len(par) < 4:
+                print(f"⚠ Datos insuficientes para correlacionar '{col_cat}'")
+                continue
+
+            r_pearson, p_pearson   = pearsonr(par["price_m2_raw"], par[col_cat])
+            r_spearman, p_spearman = spearmanr(par["price_m2_raw"], par[col_cat])
+
+            print(f"Variable catastral : {col_cat}")
+            print(f"  Pearson  r = {r_pearson:.4f}   (p = {p_pearson:.4f})")
+            print(f"  Spearman ρ = {r_spearman:.4f}   (p = {p_spearman:.4f})")
+
+            # Interpretación rápida
+            r_ref = abs(r_spearman)
+            if   r_ref >= 0.7: nivel = "ALTA"
+            elif r_ref >= 0.4: nivel = "MODERADA"
+            else:              nivel = "BAJA"
+
+            sig = "significativa" if p_spearman <= 0.05 else "NO significativa"
+            print(f"  → Correlación {nivel} y {sig} entre valor catastral y precio de mercado.\n")
+
+        # Tabla resumen por alcaldía
+        print("\nMedianas por alcaldía:")
+        print(corr_df.to_string(index=False))
+
+except Exception as e:
+    print(f"⚠ No se pudo calcular la correlación catastral: {e}")
+
+print("="*80)
 
 urban_cols = [
     "cat_mean_ratio_construccion_200m",
