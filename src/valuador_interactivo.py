@@ -209,7 +209,7 @@ h1 span, h1 code, .stApp h1 iframe {
 [data-testid="stMetricLabel"] {
     color: var(--text-color) !important;
     font-weight: 600 !important;
-    opacity: 0.85 !important; /* Incrementado para legibilidad en modo claro */
+    opacity: 0.85 !important;
 }
 
 [data-testid="stMetricValue"] {
@@ -265,7 +265,6 @@ h1, h2, h3, h4, h5, h6 {
     text-align: center;
 }
 
-/* Forzar que el número interno mantenga el color de texto adaptativo */
 .servicio-badge .s-numero {
     color: var(--text-color) !important;
     font-weight: bold !important;
@@ -279,6 +278,44 @@ h1, h2, h3, h4, h5, h6 {
     grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
     gap: 12px;
     margin: 1rem 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   MÓDULO DE INTENSIDAD DE ALERTAS - EXCLUSIVO PARA MODO CLARO
+   ═══════════════════════════════════════════════════════════════ */
+@media screen and (prefers-color-scheme: light) or screen {
+    /* Las reglas aplican si el contenedor de la app tiene la propiedad de tema claro */
+    [data-theme="light"] div[class*="stAlert"] {
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.03) !important;
+    }
+
+    /* 🟢 VERDE (Success): Cobertura peatonal alta, densidad médica, etc. */
+    [data-theme="light"] .element-container:has(.stSuccess) div[role="alert"] {
+        background-color: #E2FCEB !important; /* Pastel un poco más saturado */
+        color: #115E2E !important;            /* Texto verde bosque oscuro */
+        border-left: 6px solid #16A34A !important; /* Línea de acento más firme */
+    }
+
+    /* 🔵 AZUL (Info): Cobertura funcional, accesibilidad media, etc. */
+    [data-theme="light"] .element-container:has(.stInfo) div[role="alert"] {
+        background-color: #E0F2FE !important; /* Azul cielo sutilmente vivo */
+        color: #075985 !important;            /* Texto marino fuerte */
+        border-left: 6px solid #0EA5E9 !important;
+    }
+
+    /* 🟡 AMARILLO/NARANJA (Warning): Dependencia de auto, déficit, etc. */
+    [data-theme="light"] .element-container:has(.stWarning) div[role="alert"] {
+        background-color: #FEF3C7 !important; /* Fondo ámbar */
+        color: #92400E !important;            /* Texto chocolate/marrón legible */
+        border-left: 6px solid #D97706 !important;
+    }
+
+    /* 🔴 ROJO (Error): Rezago social o vulnerabilidad crítica */
+    [data-theme="light"] .element-container:has(.stError) div[role="alert"] {
+        background-color: #FEE2E2 !important; /* Fondo rojizo suave */
+        color: #991B1B !important;            /* Texto vino de alto contraste */
+        border-left: 6px solid #DC2626 !important;
+    }
 }
 </style>
 """, unsafe_allow_html=True)
@@ -1544,7 +1581,7 @@ with tab_valuador:
     def fmt_dist(m):
         return f"{m:.0f} m" if m < 1000 else f"{m/1000:.1f} km"
 
-    # ============================================================
+# ============================================================
     # PANEL DE ANÁLISIS DE ENTORNO URBANO
     # ============================================================
     with st.expander("🌎 Análisis de Entorno Urbano y Socioespacial",
@@ -1552,7 +1589,7 @@ with tab_valuador:
 
         # --- Bloque 1: Ciudad de 15 Minutos ---
         encabezado_seccion(
-            "Ciudad de 15 Minutos",
+            "1. Ciudad de 15 Minutos",
             "Accesibilidad a servicios esenciales a escala peatonal",
             "🏬"
         )
@@ -1613,7 +1650,7 @@ with tab_valuador:
 
         # --- Bloque 2: Transporte ---
         encabezado_seccion(
-            "Conectividad y Transporte",
+            "2. Conectividad y Transporte",
             "Red de transporte público estructurado",
             "🚊"
         )
@@ -1668,7 +1705,7 @@ with tab_valuador:
 
         # --- Bloque 3: Gentrificación ---
         encabezado_seccion(
-            "Transformación Socioespacial",
+            "3. Transformación Socioespacial",
             "Análisis de gentrificación y presión inmobiliaria",
             "🏙️"
         )
@@ -1705,7 +1742,7 @@ with tab_valuador:
 
         # --- Bloque 4: Variables Catastrales ---
         encabezado_seccion(
-            "Contexto Catastral",
+            "4. Contexto Catastral",
             "Variables del entorno inmediato (radio 200m)",
             "🗂️"
         )
@@ -1850,7 +1887,11 @@ with tab_valuador:
         st.markdown("<br>", unsafe_allow_html=True)
 
         # --- Bloque 5: Estructura urbana y desempeño ---
-        st.markdown("### 📊 5. Estructura Urbana y Desempeño del Mercado")
+        encabezado_seccion(
+            "5. Estructura Urbana y Desempeño del Mercado",
+            "Indicadores complementarios de centralidad y rezago",
+            "📊"
+        )
 
         with st.container(border=True):
             c4_1, c4_2, c4_3 = st.columns(3)
@@ -2432,22 +2473,25 @@ with tab_atlas:
     # ── Encabezado ──────────────────────────────────────────
     st.markdown("""
     <div style="
-        background: linear-gradient(135deg, #0f2c5c 0%, #1a3a6b 50%, #1565C0 100%);
+        background: var(--secondary-background-color);
         border-radius: 16px;
         padding: 2.5rem 2.5rem 2rem;
         margin-bottom: 2rem;
-        box-shadow: 0 4px 24px rgba(0,0,0,0.25);
-        border: 1px solid rgba(255,255,255,0.08);
+        box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+        border: 1px solid var(--border-color);
+        border-left: 6px solid #3B82F6;
     ">
-        <h1 style="
-            color: #e2e8f0;
+        <div style="
+            color: var(--text-color);
             font-size: 1.8rem;
             font-weight: 800;
             margin: 0 0 0.5rem;
             letter-spacing: -0.5px;
-        ">🌆 Estudio Multidimensional del Mercado Inmobiliario</h1>
+            line-height: 1.2;
+        ">🌆 Estudio Multidimensional del Mercado Inmobiliario</div>
         <p style="
-            color: #93C5FD;
+            color: var(--text-color);
+            opacity: 0.7;
             font-size: 1rem;
             margin: 0;
             line-height: 1.6;
