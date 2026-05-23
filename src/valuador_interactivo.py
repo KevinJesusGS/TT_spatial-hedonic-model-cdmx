@@ -62,6 +62,23 @@ st.set_page_config(
 )
 
 # ============================================================
+# PARCHE SIDEBAR — fondo sólido garantizado
+# ============================================================
+import streamlit.components.v1 as _stcomp
+_SIDEBAR_PATCH = (
+    "<style>"
+    "section[data-testid='stSidebar'],"
+    "section[data-testid='stSidebar']>div,"
+    "section[data-testid='stSidebar']>div>div,"
+    "section[data-testid='stSidebar']>div>div>div"
+    "{background-color:var(--secondary-background-color,#1e293b)!important;"
+    "backdrop-filter:none!important;-webkit-backdrop-filter:none!important;"
+    "opacity:1!important;}"
+    "</style>"
+)
+_stcomp.html(_SIDEBAR_PATCH, height=0, scrolling=False)
+
+# ============================================================
 # CSS GLOBAL + ENCABEZADO INSTITUCIONAL
 # Se define aquí (justo después de set_page_config) para que
 # Streamlit lo renderice antes de cualquier otro elemento.
@@ -147,10 +164,19 @@ h1 span, h1 code, .stApp h1 iframe {
     color: var(--text-color) !important;
 }
 
-/* SIDEBAR adaptativo */
-[data-testid="stSidebar"] {
-    background: var(--secondary-background-color) !important;
+/* SIDEBAR — fondo sólido absoluto */
+/* Cubre el section raíz y TODOS sus descendientes */
+section[data-testid="stSidebar"],
+section[data-testid="stSidebar"] *:not(img):not(svg):not(canvas) {
+    background-color: var(--secondary-background-color) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+}
+section[data-testid="stSidebar"] {
     border-right: 1px solid var(--border-color) !important;
+    box-shadow: 4px 0 24px rgba(0,0,0,0.4) !important;
+    opacity: 1 !important;
+    z-index: 999999 !important;
 }
 
 [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, 
@@ -403,9 +429,36 @@ h1, h2, h3, h4, h5, h6 {
         flex-shrink: 0 !important;
     }
 
-    /* ── Sidebar colapsado por defecto (Streamlit lo maneja pero reforzamos) ── */
-    [data-testid="stSidebar"] {
-        min-width: 0 !important;
+    /* ── Sidebar móvil: fondo sólido y contraste de texto garantizado ── */
+    @media screen and (max-width: 640px) {
+        section[data-testid="stSidebar"],
+        section[data-testid="stSidebar"] > div,
+        section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"],
+        section[data-testid="stSidebar"] *:not(img):not(svg):not(canvas) {
+            /* Usamos las variables nativas de Streamlit para que cambie según el tema */
+            background-color: var(--background-color, #ffffff) !important;
+            color: var(--text-color, #31333F) !important;
+            backdrop-filter: none !important;
+            -webkit-backdrop-filter: none !important;
+            opacity: 1 !important;
+        }
+
+        /* Forzar el color correcto en etiquetas de inputs, selectores y títulos */
+        section[data-testid="stSidebar"] label,
+        section[data-testid="stSidebar"] p,
+        section[data-testid="stSidebar"] h1,
+        section[data-testid="stSidebar"] h2,
+        section[data-testid="stSidebar"] h3,
+        section[data-testid="stSidebar"] span {
+            color: var(--text-color, #31333F) !important;
+        }
+
+        /* Estabilización estructural de la barra en móviles */
+        section[data-testid="stSidebar"] {
+            min-width: 300px !important;
+            box-shadow: 8px 0 32px rgba(0, 0, 0, 0.15) !important;
+            z-index: 999999 !important;
+        }
     }
 
     /* ── Inputs en móvil: más altura táctil ── */
@@ -2403,23 +2456,24 @@ with tab_valuador:
         )
     leyenda_filas = "".join(_fila_leyenda(k, v) for k, v in CAPAS_CONFIG.items())
 
-    leyenda_html = f"""
+    # ── Leyenda estática dentro del iframe (solo el marcador visual sin JS) ──
+    leyenda_html_simple = f"""
     <div style="
         position: fixed;
         bottom: 30px; left: 30px;
         z-index: 9999;
-        background: rgba(30,41,59,0.96);
-        border: 1px solid rgba(255,255,255,0.12);
+        background: rgba(30,41,59,0.97);
+        border: 1px solid rgba(255,255,255,0.15);
         border-radius: 12px;
-        padding: 12px 15px 10px;
+        padding: 10px 14px 10px;
         box-shadow: 0 4px 20px rgba(0,0,0,0.40);
         font-family: 'Segoe UI', Arial, sans-serif;
         min-width: 185px;
         color: #e2e8f0;
-    ">
+    " id="leyenda-mapa">
         <div style='font-weight:700;font-size:12.5px;margin-bottom:8px;color:#93C5FD;
                     border-bottom:2px solid #3B82F6;padding-bottom:5px;'>
-            Servicios en radio 1.2 km
+            📍 Servicios en radio 1.2 km
         </div>
         {leyenda_filas}
         <div style='margin-top:8px;padding-top:6px;border-top:1px solid rgba(255,255,255,0.1);
@@ -2435,17 +2489,32 @@ with tab_valuador:
         </div>
     </div>
     """
-    m.get_root().html.add_child(folium.Element(leyenda_html))
+
+    # Solo inyectar la leyenda dentro del mapa si el usuario la quiere visible
+    if st.session_state.get("leyenda_visible", True):
+        m.get_root().html.add_child(folium.Element(leyenda_html_simple))
 
     # Render en Streamlit
-    st.markdown("""
-    <div style="display:flex;align-items:center;gap:10px;margin:1.2rem 0 0.5rem;">
-        <span style="font-size:1.15rem;font-weight:700;letter-spacing:-0.2px;
-                     color:var(--text-primary);">🗺️ Entorno Urbano</span>
-        <span style="background:#1A73E8;color:#fff;font-size:0.7rem;font-weight:700;
-                     padding:3px 11px;border-radius:20px;letter-spacing:0.04em;">RADIO 1.2 KM</span>
-    </div>
-    """, unsafe_allow_html=True)
+    # ── Inicializar estado de la leyenda ──
+    if "leyenda_visible" not in st.session_state:
+        st.session_state["leyenda_visible"] = True
+
+    # ── Fila: título + botón toggle ──
+    _col_titulo, _col_btn = st.columns([4, 1])
+    with _col_titulo:
+        st.markdown("""
+        <div style="display:flex;align-items:center;gap:10px;margin:1.2rem 0 0.5rem;">
+            <span style="font-size:1.15rem;font-weight:700;letter-spacing:-0.2px;
+                         color:var(--text-primary);">🗺️ Entorno Urbano</span>
+            <span style="background:#1A73E8;color:#fff;font-size:0.7rem;font-weight:700;
+                         padding:3px 11px;border-radius:20px;letter-spacing:0.04em;">RADIO 1.2 KM</span>
+        </div>
+        """, unsafe_allow_html=True)
+    with _col_btn:
+        _icono_btn = "👁️ Leyenda" if st.session_state["leyenda_visible"] else "🙈 Leyenda"
+        if st.button(_icono_btn, key="toggle_leyenda", use_container_width=True):
+            st.session_state["leyenda_visible"] = not st.session_state["leyenda_visible"]
+            st.rerun()
 
     if punto_confirmado:
         st.success(
