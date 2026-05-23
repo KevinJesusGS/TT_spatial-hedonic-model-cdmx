@@ -55,13 +55,408 @@ from streamlit_folium import st_folium
 # CONFIGURACIÓN DE LA INTERFAZ DE STREAMLIT
 # ============================================================
 st.set_page_config(
-    page_title="Sistema de Valuación Inmobiliaria CDMX",
-    layout="wide"
+    page_title="Valuador Inmobiliario CDMX · ESCOM-IPN",
+    page_icon="🏙️",
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
+
+# ============================================================
+# CSS GLOBAL + ENCABEZADO INSTITUCIONAL
+# Se define aquí (justo después de set_page_config) para que
+# Streamlit lo renderice antes de cualquier otro elemento.
+# Los logos se cargan con rutas relativas al script.
+# ============================================================
+import base64 as _b64
+import os as _os
+
+def _img_to_b64(path):
+    try:
+        with open(path, "rb") as _f:
+            return _b64.b64encode(_f.read()).decode()
+    except Exception:
+        return ""
+
+_SCRIPT_DIR = _os.path.dirname(_os.path.abspath(__file__))
+def _find_logo(filename):
+    for candidate in [
+        _os.path.join(_SCRIPT_DIR, filename),
+        _os.path.join(_SCRIPT_DIR, "assets", filename),
+        _os.path.join(_SCRIPT_DIR, "..", "outputs", "assets", filename),
+    ]:
+        if _os.path.exists(candidate):
+            return candidate
+    return ""
+
+_escom_b64 = _img_to_b64(_find_logo("escom.png"))
+_ipn_b64   = _img_to_b64(_find_logo("ipn.png"))
+
+import streamlit.components.v1 as _components
+
+# ============================================================
+# SISTEMA DE DISEÑO PROFESIONAL - ADAPTATIVO TOTAL (V3)
+# ============================================================
+st.markdown("""
+<style>
+/* Forzar que el fondo de la app use la variable global de Streamlit */
+.stApp {
+    background-color: var(--background-color) !important;
+    color: var(--text-color) !important;
+}
+
+/* Tarjeta personalizada y contenedores de mapas */
+.custom-card {
+    background-color: var(--secondary-background-color) !important;
+    border: 1px solid var(--border-color) !important;
+    padding: 1.5rem;
+    border-radius: 14px;
+    margin-bottom: 1.5rem;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+}
+
+/* Asegurar la total visibilidad de títulos dentro de los contenedores dinámicos */
+.custom-card h1, .custom-card h2, .custom-card h3, .custom-card h4 {
+    color: var(--text-color) !important;
+    margin-top: 0 !important;
+    margin-bottom: 0.5rem !important;
+    font-weight: 700 !important;
+}
+
+.custom-card p, .custom-card span, .custom-card div {
+    color: var(--text-color) !important;
+    opacity: 0.95;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   RESET Y BASE NATIVA ADAPTATIVA
+   ═══════════════════════════════════════════════════════════════ */
+* {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+    -webkit-font-smoothing: antialiased;
+}
+
+.block-container {
+    padding-top: 2rem !important;
+    padding-left: 3rem !important;
+    padding-right: 3rem !important;
+    max-width: 1600px !important;
+}
+
+/* CORRECCIÓN DE ÍCONOS Y TÍTULOS EN EL HEADER */
+h1 span, h1 code, .stApp h1 iframe {
+    color: var(--text-color) !important;
+}
+
+/* SIDEBAR adaptativo */
+[data-testid="stSidebar"] {
+    background: var(--secondary-background-color) !important;
+    border-right: 1px solid var(--border-color) !important;
+}
+
+[data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, 
+[data-testid="stSidebar"] h3, [data-testid="stSidebar"] p, 
+[data-testid="stSidebar"] span {
+    color: var(--text-color) !important;
+}
+
+/* INPUTS dinámicos */
+[data-testid="stSelectbox"] label, [data-testid="stSlider"] label, [data-testid="stNumberInput"] label {
+    font-size: 0.875rem !important;
+    font-weight: 600 !important;
+    color: var(--text-color) !important;
+}
+
+[data-testid="stSelectbox"] > div > div {
+    background: var(--background-color) !important;
+    border: 1.5px solid var(--border-color) !important;
+    border-radius: 10px !important;
+    color: var(--text-color) !important;
+}
+
+[data-testid="stNumberInput"] input {
+    background: var(--background-color) !important;
+    border: 1.5px solid var(--border-color) !important;
+    border-radius: 10px !important;
+    color: var(--text-color) !important;
+}
+
+/* TABS adaptivos */
+[data-testid="stTabs"] button {
+    font-size: 1rem;
+    font-weight: 600;
+    padding: 0.875rem 1.75rem;
+    color: var(--text-color) !important;
+    opacity: 0.6;
+}
+
+[data-testid="stTabs"] button[aria-selected="true"] {
+    opacity: 1 !important;
+    color: #3B82F6 !important;
+    background: var(--secondary-background-color) !important;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   INDICADORES Y MÉTRICAS (MÁXIMO CONTRASTE MODO CLARO/OSCURO)
+   ═══════════════════════════════════════════════════════════════ */
+[data-testid="stMetric"] {
+    background: var(--secondary-background-color) !important;
+    border: 1.5px solid var(--border-color) !important;
+    border-radius: 16px;
+    padding: 1.25rem 1.5rem;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.02) !important;
+}
+
+[data-testid="stMetricLabel"] {
+    color: var(--text-color) !important;
+    font-weight: 600 !important;
+    opacity: 0.85 !important; /* Incrementado para legibilidad en modo claro */
+}
+
+[data-testid="stMetricValue"] {
+    color: var(--text-color) !important;
+    font-weight: 800 !important;
+}
+
+/* EXPANDERS */
+[data-testid="stExpander"] {
+    background: var(--background-color) !important;
+    border: 1.5px solid var(--border-color) !important;
+    border-radius: 16px !important;
+}
+
+[data-testid="stExpander"] summary {
+    color: var(--text-color) !important;
+    background: var(--secondary-background-color) !important;
+}
+
+/* SEPARADORES */
+hr {
+    border: none !important;
+    height: 1px !important;
+    background: var(--border-color) !important;
+    margin: 2rem 0 !important;
+}
+
+/* TIPOGRAFÍA GLOBAL */
+h1, h2, h3, h4, h5, h6 {
+    color: var(--text-color) !important;
+}
+
+/* SCROLLBAR ADAPTATIVO */
+::-webkit-scrollbar { width: 8px; }
+::-webkit-scrollbar-track { background: var(--background-color); }
+::-webkit-scrollbar-thumb {
+    background: #3B82F6;
+    border-radius: 4px;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   DIMENSIONES DE ENTORNO URBANO (BADGES 1 A 5) CORREGIDOS
+   ═══════════════════════════════════════════════════════════════ */
+.servicio-badge {
+    padding: 10px 12px !important;
+    background: var(--secondary-background-color) !important;
+    border: 1px solid var(--border-color) !important;
+    border-radius: 12px !important;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+}
+
+/* Forzar que el número interno mantenga el color de texto adaptativo */
+.servicio-badge .s-numero {
+    color: var(--text-color) !important;
+    font-weight: bold !important;
+    font-size: 1.1rem !important;
+    display: block !important;
+    margin-bottom: 4px !important;
+}
+
+.servicios-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+    gap: 12px;
+    margin: 1rem 0;
+}
+</style>
+""", unsafe_allow_html=True)
+
+# ============================================================
+# FUNCIONES VISUALES HELPER
+# ============================================================
+
+def encabezado_seccion(titulo, subtitulo=None, icono=None):
+    """Encabezado visual profesional para secciones — adaptativo claro/oscuro"""
+    icono_html = f'<span style="margin-right:0.75rem; font-size:1.75rem;">{icono}</span>' if icono else ''
+    subtitulo_html = (
+        f'<div style="color:var(--text-muted); font-size:0.9375rem; margin-top:0.5rem;">{subtitulo}</div>'
+        if subtitulo else ''
+    )
+    st.markdown(f"""
+    <div style="margin:2.5rem 0 1.5rem 0;">
+        <div style="display:flex; align-items:center;">
+            {icono_html}
+            <h3 style="margin:0; color:var(--text-primary); font-size:1.5rem; font-weight:800;
+                        letter-spacing:-0.01em;">
+                {titulo}
+            </h3>
+        </div>
+        {subtitulo_html}
+        <div style="width:60px; height:4px; background:linear-gradient(90deg,#3B82F6,#10B981);
+                    border-radius:2px; margin-top:0.75rem;"></div>
+    </div>
+    """, unsafe_allow_html=True)
+
+# ============================================================
+# ENCABEZADO INSTITUCIONAL PREMIUM (ADAPTATIVO Y CORREGIDO)
+# ============================================================
+
+_logo_h    = "height:70px;object-fit:contain;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.15));"
+_ipn_tag   = f"<img src='data:image/png;base64,{_ipn_b64}' style='{_logo_h}'>" if _ipn_b64 else "🏛️"
+_escom_tag = f"<img src='data:image/png;base64,{_escom_b64}' style='{_logo_h}'>" if _escom_b64 else "🎓"
+
+# 1. Inyección de CSS Adaptativo mediante st.markdown nativo para evitar conflictos de renderizado
+st.markdown("""
+<style>
+.premium-header {
+    background: var(--secondary-background-color);
+    border-radius: 24px;
+    padding: 2rem 2.5rem;
+    margin-bottom: 2rem;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
+    border: 1px solid var(--border-color);
+    position: relative;
+    overflow: hidden;
+}
+.premium-header::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, transparent, #3B82F6, #10B981, #3B82F6, transparent);
+    animation: shimmer 3s ease-in-out infinite;
+}
+@keyframes shimmer {
+    0%, 100% { opacity: 0.5; }
+    50% { opacity: 1; }
+}
+.header-content {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 2rem;
+}
+.logo-section {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+}
+.logo-box {
+    width: 70px;
+    height: 70px;
+    background: transparent !important;
+    border-radius: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: none !important;
+    font-size: 2.5rem;
+}
+.logo-divider {
+    width: 1px;
+    height: 60px;
+    background: linear-gradient(to bottom, transparent, var(--border-color), transparent);
+}
+.title-section {
+    flex: 1;
+    text-align: center;
+}
+.main-title {
+    color: var(--text-color) !important;
+    font-size: 1.75rem;
+    font-weight: 900;
+    letter-spacing: -0.03em;
+    margin-bottom: 0.5rem;
+    background: none !important;
+    -webkit-text-fill-color: initial !important;
+}
+.subtitle {
+    color: var(--text-color);
+    opacity: 0.8;
+    font-size: 0.875rem;
+    font-weight: 500;
+}
+.institution-badge {
+    display: inline-block;
+    background: rgba(59, 130, 246, 0.15);
+    border: 1px solid #3B82F6;
+    color: #3B82F6;
+    padding: 0.35rem 1rem;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    margin-top: 0.5rem;
+}
+.authors-section {
+    text-align: right;
+    color: var(--text-color);
+    opacity: 0.7;
+    font-size: 0.8125rem;
+}
+.author-name {
+    color: var(--text-color);
+    font-weight: 600;
+}
+</style>
+""", unsafe_allow_html=True)
+
+# 2. Construcción de la estructura HTML interactuando correctamente con los b64
+_header_html = f"""
+<div class="premium-header">
+    <div class="header-content">
+        <div class="logo-section">
+            <div class="logo-box">
+                {f'<img src="data:image/png;base64,{_ipn_b64}" style="height:66px;width:66px;object-fit:contain;border-radius:12px;">' if _ipn_b64 else '<span style="font-size:2.2rem;">🏛️</span>'}
+            </div>
+            <div class="logo-divider"></div>
+            <div class="logo-box">
+                {f'<img src="data:image/png;base64,{_escom_b64}" style="height:66px;width:66px;object-fit:contain;border-radius:12px;">' if _escom_b64 else '<span style="font-size:2.2rem;">🎓</span>'}
+            </div>
+        </div>
+        <div class="title-section">
+            <div class="main-title">
+                🏙️ Sistema de Valuación Inmobiliaria · CDMX
+            </div>
+            <div class="subtitle">
+                Escuela Superior de Cómputo • Instituto Politécnico Nacional • 2026
+            </div>
+            <div class="institution-badge">
+                Trabajo Terminal
+            </div>
+        </div>
+        <div class="authors-section">
+            <div class="author-name">Kevin J. González Sosa</div>
+            <div class="author-name">José M. Torres Gutiérrez</div>
+            <div style="margin-top:0.5rem; font-size:0.75rem; opacity:0.7;">
+                ESCOM-IPN
+            </div>
+        </div>
+    </div>
+</div>
+"""
+
+# 3. Renderizado final seguro
+st.markdown(_header_html, unsafe_allow_html=True)
 
 # ============================================================
 # RUTAS RELATIVAS (ESTRUCTURA DE REPOSITORIO)
 # ============================================================
+
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 
 OUTPUTS_PATH   = os.path.join(PROJECT_ROOT, "..", "outputs", "results")
@@ -976,8 +1371,21 @@ def predict_price_con_punto(area, rooms, baths, parking, ant, colonia, lat, lon)
 # CONTROLES DE ENTRADA (SIDEBAR)
 # ============================================================
 with st.sidebar:
-    st.header("🏢 Parámetros del Inmueble")
-    alcaldia_sel       = st.selectbox("Alcaldía", ALCALDIAS_DISPONIBLES)
+    # Header visual profesional del sidebar
+    st.markdown("""
+    <div style="text-align:center; padding:1.5rem 0; border-bottom:2px solid var(--border-subtle);
+                margin-bottom:1.5rem;">
+        <div style="font-size:3rem; margin-bottom:0.5rem;">🏢</div>
+        <h2 style="margin:0; color:var(--text-primary); font-size:1.25rem; font-weight:800;">
+            Parámetros del Inmueble
+        </h2>
+        <p style="color:var(--text-muted); font-size:0.875rem; margin-top:0.5rem;">
+            Personaliza tu valuación
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    alcaldia_sel = st.selectbox("Alcaldía", ALCALDIAS_DISPONIBLES)
     colonias_filtradas = ALCALDIA_COLONIAS.get(alcaldia_sel, [])
     
     colonia_sel = st.selectbox(
@@ -1066,7 +1474,6 @@ if distancias_confirmadas:
 # ============================================================
 # CUADRO DE MANDO PRINCIPAL
 # ============================================================
-st.title("Sistema de Valuación Inmobiliaria CDMX")
 
 tab_valuador, tab_atlas = st.tabs([
     "🏢 Valuador Interactivo",
@@ -1075,13 +1482,64 @@ tab_valuador, tab_atlas = st.tabs([
 
 with tab_valuador:
 
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Precio Estimado Comercial",  f"${precio:,.0f} MXN")
-    c2.metric("Valor Unitario (m²)",        f"${precio_m2:,.0f} MXN/m²")
-    c3.metric("Segmento / Clúster",
-            f"{'Lujo' if seg_label == 'lujo' else 'Estándar'} · C{cluster_id}")
-    c4.metric("Índice de Gentrificación",
-            round(datos_colonia.get("gentrification_index", 0), 3))
+    # ── Métricas principales — HTML propio para evitar truncado y adaptarse al tema ──
+    precio_fmt  = f"${precio:,.0f} MXN"
+    pm2_fmt     = f"${precio_m2:,.0f} MXN/m²"
+    seg_fmt     = f"{'Lujo' if seg_label == 'lujo' else 'Estándar'} · C{cluster_id}"
+    gentrif_fmt = str(round(datos_colonia.get("gentrification_index", 0), 3))
+
+    st.markdown(f"""
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:1rem;margin-bottom:1.5rem;">
+        <div style="background:var(--bg-surface);border:1.5px solid var(--border-subtle);
+                    border-radius:16px;padding:1.2rem 1.4rem;box-shadow:var(--shadow-sm);
+                    border-top:3px solid #3B82F6;">
+            <div style="font-size:0.72rem;font-weight:700;color:var(--text-muted);
+                        text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.4rem;">
+                Precio Estimado Comercial
+            </div>
+            <div style="font-size:1.55rem;font-weight:800;color:var(--text-primary);
+                        letter-spacing:-0.02em;line-height:1.2;word-break:break-word;">
+                {precio_fmt}
+            </div>
+        </div>
+        <div style="background:var(--bg-surface);border:1.5px solid var(--border-subtle);
+                    border-radius:16px;padding:1.2rem 1.4rem;box-shadow:var(--shadow-sm);
+                    border-top:3px solid #10B981;">
+            <div style="font-size:0.72rem;font-weight:700;color:var(--text-muted);
+                        text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.4rem;">
+                Valor Unitario (m²)
+            </div>
+            <div style="font-size:1.55rem;font-weight:800;color:var(--text-primary);
+                        letter-spacing:-0.02em;line-height:1.2;word-break:break-word;">
+                {pm2_fmt}
+            </div>
+        </div>
+        <div style="background:var(--bg-surface);border:1.5px solid var(--border-subtle);
+                    border-radius:16px;padding:1.2rem 1.4rem;box-shadow:var(--shadow-sm);
+                    border-top:3px solid #8B5CF6;">
+            <div style="font-size:0.72rem;font-weight:700;color:var(--text-muted);
+                        text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.4rem;">
+                Segmento / Clúster
+            </div>
+            <div style="font-size:1.55rem;font-weight:800;color:var(--text-primary);
+                        letter-spacing:-0.02em;line-height:1.2;">
+                {seg_fmt}
+            </div>
+        </div>
+        <div style="background:var(--bg-surface);border:1.5px solid var(--border-subtle);
+                    border-radius:16px;padding:1.2rem 1.4rem;box-shadow:var(--shadow-sm);
+                    border-top:3px solid #F59E0B;">
+            <div style="font-size:0.72rem;font-weight:700;color:var(--text-muted);
+                        text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.4rem;">
+                Índice de Gentrificación
+            </div>
+            <div style="font-size:1.55rem;font-weight:800;color:var(--text-primary);
+                        letter-spacing:-0.02em;line-height:1.2;">
+                {gentrif_fmt}
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
     def fmt_dist(m):
         return f"{m:.0f} m" if m < 1000 else f"{m/1000:.1f} km"
@@ -1093,7 +1551,11 @@ with tab_valuador:
                     expanded=True):
 
         # --- Bloque 1: Ciudad de 15 Minutos ---
-        st.markdown("### 🏬 1. Accesibilidad a Escala Humana (Ciudad de 15 Minutos)")
+        encabezado_seccion(
+            "Ciudad de 15 Minutos",
+            "Accesibilidad a servicios esenciales a escala peatonal",
+            "🏬"
+        )
 
         with st.container(border=True):
             score_15   = float(datos_entorno.get("score_15min", 0))
@@ -1150,7 +1612,11 @@ with tab_valuador:
         st.markdown("<br>", unsafe_allow_html=True)
 
         # --- Bloque 2: Transporte ---
-        st.markdown("### 🚊 2. Conectividad y Red de Transporte Estructurado")
+        encabezado_seccion(
+            "Conectividad y Transporte",
+            "Red de transporte público estructurado",
+            "🚊"
+        )
 
         with st.container(border=True):
             c2_izquierda, c2_derecha = st.columns([3, 1.2])
@@ -1188,7 +1654,7 @@ with tab_valuador:
             with c2_derecha:
                 min_dist = min([d_metro, d_mb, d_tren, d_trole])
                 st.markdown(
-                    "<b style='font-size:14px;color:#808495;'>Evaluación Multimodal</b>",
+                    "<b style='font-size:14px;color:var(--text-muted);'>Evaluación Multimodal</b>",
                     unsafe_allow_html=True
                 )
                 if min_dist <= 500:
@@ -1201,7 +1667,11 @@ with tab_valuador:
         st.markdown("<br>", unsafe_allow_html=True)
 
         # --- Bloque 3: Gentrificación ---
-        st.markdown("### 🏙️ 3. Dinámica de Transformación Socioespacial")
+        encabezado_seccion(
+            "Transformación Socioespacial",
+            "Análisis de gentrificación y presión inmobiliaria",
+            "🏙️"
+        )
 
         with st.container(border=True):
             c3_1, c3_2, c3_3 = st.columns(3)
@@ -1234,7 +1704,11 @@ with tab_valuador:
         st.markdown("<br>", unsafe_allow_html=True)
 
         # --- Bloque 4: Variables Catastrales ---
-        st.markdown("### 🗂️ 4. Contexto Catastral del Entorno (Radio 200 m)")
+        encabezado_seccion(
+            "Contexto Catastral",
+            "Variables del entorno inmediato (radio 200m)",
+            "🗂️"
+        )
 
         with st.container(border=True):
 
@@ -1560,11 +2034,19 @@ with tab_valuador:
         "ciclovias":   {"label": "🚲 Ciclovías",      "color": "teal",      "icono": "road",           "prefix": "fa", "max_puntos": 20},
     }
 
+    # Colores hex que coinciden EXACTAMENTE con los colores Folium usados arriba
     _COLOR_HEX = {
-        "blue": "#1A73E8", "red": "#E53935", "cadetblue": "#5F9EA0",
-        "purple": "#7B1FA2", "darkblue": "#1565C0", "green": "#388E3C",
-        "darkred": "#B71C1C", "orange": "#F57C00", "beige": "#A1887F",
-        "darkgreen": "#1B5E20", "teal": "#008080",
+        "blue":      "#1A73E8",   # STC Metro
+        "red":       "#E53935",   # Metrobús
+        "cadetblue": "#5F9EA0",   # Tren Ligero
+        "purple":    "#8E24AA",   # Trolebús
+        "darkblue":  "#1565C0",   # Cablebús
+        "green":     "#43A047",   # Áreas Verdes
+        "darkred":   "#C62828",   # Salud
+        "orange":    "#FB8C00",   # Comercio
+        "beige":     "#8D6E63",   # Esc. Privadas
+        "darkgreen": "#2E7D32",   # Esc. Públicas
+        "teal":      "#00796B",   # Ciclovías
     }
 
     def _latlon_a_utm_mapa(lat, lon):
@@ -1592,19 +2074,21 @@ with tab_valuador:
         tiles="OpenStreetMap",
     )
 
-    # Polígono de la colonia
+    # Polígono de la colonia — dentro de FeatureGroup para que el LayerControl muestre nombre correcto
     if poligono_colonia_geojson:
+        grupo_colonia = folium.FeatureGroup(name="🔵 Límite de colonia", show=True)
         folium.GeoJson(
             poligono_colonia_geojson,
             style_function=lambda _: {
                 "color":       "#1A73E8",
-                "weight":      2.5,
+                "weight":      2,
                 "fillColor":   "#1A73E8",
                 "fillOpacity": 0.06,
                 "dashArray":   "6 4",
             },
-            tooltip="Límite de la colonia",
-        ).add_to(m)
+            tooltip=f"Límite de colonia: {colonia_sel.title()}",
+        ).add_to(grupo_colonia)
+        grupo_colonia.add_to(m)
 
     lat_actual = st.session_state[_key_lat]
     lon_actual = st.session_state[_key_lon]
@@ -1737,43 +2221,61 @@ with tab_valuador:
     folium.LayerControl(collapsed=True, position="topright").add_to(m)
 
     # Leyenda
-    leyenda_filas = "".join([
-        f"<div style='display:flex;align-items:center;margin-bottom:6px;'>"
-        f"<span style='background:{_COLOR_HEX[cfg['color']]};width:13px;height:13px;"
-        f"border-radius:50%;display:inline-block;margin-right:8px;"
-        f"border:1px solid rgba(0,0,0,0.15);flex-shrink:0;'></span>"
-        f"<span style='font-size:12px;color:#222;line-height:1.3;'>{cfg['label']}</span></div>"
-        for clave, cfg in CAPAS_CONFIG.items()
-    ])
+    def _fila_leyenda(clave, cfg):
+        color_hex = _COLOR_HEX[cfg['color']]
+        label     = cfg['label']
+        return (
+            f"<div style='display:flex;align-items:center;margin-bottom:5px;'>"
+            f"<span style='background:{color_hex};width:12px;height:12px;"
+            f"border-radius:50%;display:inline-block;margin-right:8px;"
+            f"border:1px solid rgba(255,255,255,0.25);flex-shrink:0;'></span>"
+            f"<span style='font-size:11.5px;line-height:1.3;'>{label}</span></div>"
+        )
+    leyenda_filas = "".join(_fila_leyenda(k, v) for k, v in CAPAS_CONFIG.items())
 
     leyenda_html = f"""
     <div style="
         position: fixed;
         bottom: 30px; left: 30px;
         z-index: 9999;
-        background: rgba(255,255,255,0.97);
-        border: 1px solid #ccc;
-        border-radius: 10px;
-        padding: 12px 16px;
-        box-shadow: 0 2px 12px rgba(0,0,0,0.18);
+        background: rgba(30,41,59,0.96);
+        border: 1px solid rgba(255,255,255,0.12);
+        border-radius: 12px;
+        padding: 12px 15px 10px;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.40);
         font-family: 'Segoe UI', Arial, sans-serif;
-        min-width: 175px;
+        min-width: 185px;
+        color: #e2e8f0;
     ">
-        <div style='font-weight:700;font-size:13px;margin-bottom:9px;color:#111;
-                    border-bottom:1px solid #eee;padding-bottom:6px;'>
+        <div style='font-weight:700;font-size:12.5px;margin-bottom:8px;color:#93C5FD;
+                    border-bottom:2px solid #3B82F6;padding-bottom:5px;'>
             Servicios en radio 1.2 km
         </div>
         {leyenda_filas}
-        <div style='margin-top:8px;padding-top:6px;border-top:1px solid #eee;
-                    font-size:10px;color:#666;'>
-            🔴 Límite de la colonia
+        <div style='margin-top:8px;padding-top:6px;border-top:1px solid rgba(255,255,255,0.1);
+                    display:flex;align-items:center;gap:6px;font-size:11px;color:#94a3b8;'>
+            <span style='display:inline-block;width:22px;height:0;
+                         border-top:2px dashed #60A5FA;flex-shrink:0;'></span>
+            Límite de colonia
+        </div>
+        <div style='display:flex;align-items:center;gap:6px;font-size:11px;color:#94a3b8;margin-top:4px;'>
+            <span style='display:inline-block;width:22px;height:0;
+                         border-top:2px solid #F87171;flex-shrink:0;'></span>
+            Radio de análisis
         </div>
     </div>
     """
     m.get_root().html.add_child(folium.Element(leyenda_html))
 
     # Render en Streamlit
-    st.subheader("🗺️ Entorno Urbano — Radio 1.2 km")
+    st.markdown("""
+    <div style="display:flex;align-items:center;gap:10px;margin:1.2rem 0 0.5rem;">
+        <span style="font-size:1.15rem;font-weight:700;letter-spacing:-0.2px;
+                     color:var(--text-primary);">🗺️ Entorno Urbano</span>
+        <span style="background:#1A73E8;color:#fff;font-size:0.7rem;font-weight:700;
+                     padding:3px 11px;border-radius:20px;letter-spacing:0.04em;">RADIO 1.2 KM</span>
+    </div>
+    """, unsafe_allow_html=True)
 
     if punto_confirmado:
         st.success(
@@ -1781,7 +2283,7 @@ with tab_valuador:
             f"distancias y precio recalculados."
         )
     else:
-        st.info("📍 Arrastra el ícono 🏠 dentro de la colonia y confirma la ubicación.")
+        st.info("📍 Usa el ícono ✏️ del panel izquierdo del mapa para colocar un marcador, luego confirma.")
 
     # Contadores de servicios
     iconos_txt = {
@@ -1795,9 +2297,23 @@ with tab_valuador:
         "esc_privada": "Esc. Priv.", "esc_publica": "Esc. Púb.", "ciclovias": "Ciclovías",
     }
 
-    cols_resumen = st.columns(len(resumen_capas))
-    for col, (clave, n) in zip(cols_resumen, resumen_capas.items()):
-        col.metric(f"{iconos_txt[clave]} {nombres_cortos[clave]}", n)
+    # Contadores de servicios — grilla adaptativa con icono + nombre + número
+    badges_html = '<div class="servicios-grid">'
+    for clave, n in resumen_capas.items():
+        icono  = iconos_txt[clave]
+        nombre = nombres_cortos[clave]
+        color  = "#3B82F6" if n > 0 else "var(--text-muted)"
+        badges_html += (
+            f'<div class="servicio-badge">'
+            f'  <span class="s-icono">{icono}</span>'
+            f'  <span class="s-nombre">{nombre}</span>'
+            f'  <span class="s-numero" style="color:{color};">{n}</span>'
+            f'</div>'
+        )
+    badges_html += '</div>'
+    st.markdown(badges_html, unsafe_allow_html=True)
+
+    st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
 
     # ============================================================
     # RESULTADO DEL MAPA
@@ -1806,9 +2322,9 @@ with tab_valuador:
     resultado_mapa = st_folium(
         m,
         use_container_width=True,
-        height=540,
-        key=f"mapa_{colonia_sel}",
-        returned_objects=["last_active_drawing"],  # SOLO dibujo, no clics en otros marcadores
+        height=620,
+        key=f"mapa_{colonia_sel}_{st.session_state.get(f'recenter_{colonia_sel}', 0)}",
+        returned_objects=["last_active_drawing"],
     )
 
     # ============================================================
@@ -1852,58 +2368,61 @@ with tab_valuador:
             # válida de session_state en el próximo rerun natural (al confirmar).
             st.warning("⚠️ Posición fuera de la colonia — no se actualizó. Mueve el marcador dentro del límite azul y confirma.")
 
-    # ============================================================
-    # POSICIÓN ACTUAL REAL DEL MARCADOR
-    # SIEMPRE LEER DESDE SESSION_STATE
-    # ============================================================
-
     lat_actual = st.session_state[_key_lat]
     lon_actual = st.session_state[_key_lon]
-
     punto_confirmado = st.session_state[_key_confirmado]
 
     # ============================================================
-    # BOTONES
+    # BOTONES DE CONTROL DEL MAPA
     # ============================================================
-
-    col_btn1, col_btn2, _ = st.columns([2, 2, 4])
+    st.markdown("<div style='height:0.3rem'></div>", unsafe_allow_html=True)
+    col_btn1, col_btn2, col_btn3, _ = st.columns([2, 2, 2, 2])
 
     with col_btn1:
-
         if st.button(
             "✅ Confirmar ubicación",
             type="primary",
             use_container_width=True
         ):
             st.session_state[_key_confirmado] = True
-            # Limpiar distancias cacheadas para que se recalculen con el punto actual
             st.session_state[_key_dist] = None
             st.rerun()
 
     with col_btn2:
-
         if st.button(
             "↩️ Restablecer centroide",
             use_container_width=True
         ):
-
             st.session_state[_key_lat] = lat_base
             st.session_state[_key_lon] = lon_base
-
             st.session_state[_key_confirmado] = False
             st.session_state[_key_dist] = None
-
             st.rerun()
 
-    # ============================================================
-    # TEXTO INFORMATIVO
-    # ============================================================
+    with col_btn3:
+        # Botón de recentrar: actualiza el zoom_center del mapa al punto actual
+        if st.button(
+            "🎯 Recentrar en vivienda",
+            use_container_width=True,
+            help="Vuelve el mapa al punto de análisis actual con zoom completo"
+        ):
+            # Forzar re-render del mapa con nueva clave para que Folium lo re-inicialice centrado
+            st.session_state[f"recenter_{colonia_sel}"] = (
+                st.session_state.get(f"recenter_{colonia_sel}", 0) + 1
+            )
+            st.rerun()
 
-    st.caption(
-        f"📐 Radio: {RADIO_M} m · "
-        f"Punto: {'confirmado ✅' if punto_confirmado else 'pendiente de confirmar'} · "
-        f"{lat_actual:.5f}, {lon_actual:.5f}"
+    st.markdown(
+        f"<div style='font-size:0.75rem;color:var(--text-muted);margin-top:0.5rem;"
+        f"padding:0.5rem 0.75rem;background:var(--bg-surface-alt);"
+        f"border-radius:8px;border:1px solid var(--border-subtle);'>"
+        f"📐 Radio de análisis: <b style='color:var(--text-secondary);'>{RADIO_M} m</b> &nbsp;·&nbsp; "
+        f"Estado: <b style='color:var(--text-secondary);'>{'✅ Confirmado' if punto_confirmado else '⏳ Pendiente'}</b> &nbsp;·&nbsp; "
+        f"Coordenadas: <b style='color:var(--text-secondary);'>{lat_actual:.5f}, {lon_actual:.5f}</b>"
+        f"</div>",
+        unsafe_allow_html=True
     )
+    st.markdown("<div style='height:0.8rem'></div>", unsafe_allow_html=True)
 
 # ============================================================
 # PESTAÑA: ESTUDIO MULTIDIMENSIONAL
@@ -1913,11 +2432,12 @@ with tab_atlas:
     # ── Encabezado ──────────────────────────────────────────
     st.markdown("""
     <div style="
-        background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+        background: linear-gradient(135deg, #0f2c5c 0%, #1a3a6b 50%, #1565C0 100%);
         border-radius: 16px;
         padding: 2.5rem 2.5rem 2rem;
         margin-bottom: 2rem;
-        box-shadow: 0 4px 24px rgba(0,0,0,0.3);
+        box-shadow: 0 4px 24px rgba(0,0,0,0.25);
+        border: 1px solid rgba(255,255,255,0.08);
     ">
         <h1 style="
             color: #e2e8f0;
@@ -1927,7 +2447,7 @@ with tab_atlas:
             letter-spacing: -0.5px;
         ">🌆 Estudio Multidimensional del Mercado Inmobiliario</h1>
         <p style="
-            color: #94a3b8;
+            color: #93C5FD;
             font-size: 1rem;
             margin: 0;
             line-height: 1.6;
@@ -2097,14 +2617,14 @@ with tab_atlas:
     if not mapas_filtrados:
         st.warning("Selecciona al menos una categoría para ver los mapas.")
     else:
-        # ── Colores por categoría ────────────────────────────
+        # ── Colores por categoría — oscuros para garantizar legibilidad siempre ─
         COLORES_CAT = {
-            "Mercado Inmobiliario":     ("#1e3a5f", "#3b82f6"),
-            "Análisis Espacial":        ("#1a3a2a", "#22c55e"),
-            "Catastro":                 ("#3a2a1a", "#f97316"),
-            "Movilidad y Accesibilidad":("#2a1a3a", "#a855f7"),
-            "Dinámicas Sociales":       ("#3a1a1a", "#ef4444"),
-            "Validación del Modelo":    ("#1a2a3a", "#06b6d4"),
+            "Mercado Inmobiliario":      ("#0a1e3d", "#60a5fa"),
+            "Análisis Espacial":         ("#092416", "#34d399"),
+            "Catastro":                  ("#291408", "#fb923c"),
+            "Movilidad y Accesibilidad": ("#160a2d", "#c084fc"),
+            "Dinámicas Sociales":        ("#290a0a", "#f87171"),
+            "Validación del Modelo":     ("#071929", "#22d3ee"),
         }
 
         # ── Galería en cuadrícula de 2 columnas ─────────────
@@ -2114,60 +2634,80 @@ with tab_atlas:
             col = cols_galeria[i % 2]
             ruta_img = os.path.join(MAPAS_DIR, mapa["archivo"])
 
-            bg_dark, accent = COLORES_CAT.get(mapa["categoria"], ("#1e293b", "#64748b"))
+            # Obtenemos el color de acento según la categoría (usamos las variables de Streamlit para el fondo)
+            _, accent = COLORES_CAT.get(mapa["categoria"], ("#111827", "#94a3b8"))
 
             with col:
-                # Badge de categoría + título
+                # Badge de categoría + título — Adaptable a Modo Claro y Modo Oscuro
                 st.markdown(f"""
                 <div style="
-                    background: {bg_dark};
-                    border: 1px solid {accent}40;
-                    border-left: 4px solid {accent};
+                    background: var(--secondary-background-color);
+                    border: 1px solid var(--border-color);
+                    border-left: 5px solid {accent};
                     border-radius: 12px;
-                    padding: 1rem 1.2rem 0.7rem;
+                    padding: 1rem 1.2rem 0.9rem;
                     margin-bottom: 0.5rem;
+                    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
                 ">
                     <span style="
-                        background: {accent}25;
+                        background: {accent}20;
                         color: {accent};
-                        font-size: 0.7rem;
-                        font-weight: 700;
-                        letter-spacing: 0.08em;
-                        padding: 2px 10px;
+                        font-size: 0.68rem;
+                        font-weight: 800;
+                        letter-spacing: 0.1em;
+                        padding: 3px 10px;
                         border-radius: 20px;
                         text-transform: uppercase;
-                    ">{mapa['categoria']}</span>
+                        border: 1px solid {accent}40;
+                        display: inline-block;
+                        margin-bottom: 0.1rem;
+                    ;">{mapa['categoria']}</span>
                     <h3 style="
-                        color: #f1f5f9;
+                        color: var(--text-color);
                         font-size: 1.05rem;
                         font-weight: 700;
-                        margin: 0.5rem 0 0.3rem;
+                        margin: 0.55rem 0 0.35rem;
+                        line-height: 1.3;
                     ">{mapa['emoji']} {mapa['titulo']}</h3>
                     <p style="
-                        color: #94a3b8;
-                        font-size: 0.85rem;
+                        color: var(--text-color);
+                        opacity: 0.85;
+                        font-size: 0.84rem;
                         margin: 0;
-                        line-height: 1.5;
+                        line-height: 1.55;
                     ">{mapa['descripcion']}</p>
                 </div>
                 """, unsafe_allow_html=True)
 
-                # Imagen
+                # Imagen con solución al contraste del título/pie inferior
                 if os.path.exists(ruta_img):
                     st.image(
                         ruta_img,
-                        use_container_width=True,
-                        caption=f"Mapa {i+1} de {len(mapas_filtrados)} · {mapa['titulo']}"
+                        use_container_width=True
                     )
+                    # Sustituimos el caption nativo invisible por un contenedor HTML con contraste perfecto
+                    st.markdown(f"""
+                    <div style="
+                        text-align: center; 
+                        font-size: 0.78rem; 
+                        color: var(--text-color); 
+                        opacity: 0.6; 
+                        margin-top: -0.25rem; 
+                        margin-bottom: 1rem;
+                    ">
+                        Mapa {i+1} de {len(mapas_filtrados)} · {mapa['titulo']}
+                    </div>
+                    """, unsafe_allow_html=True)
                 else:
                     st.markdown(f"""
                     <div style="
-                        background: #1e293b;
-                        border: 2px dashed #334155;
+                        background: var(--secondary-background-color);
+                        border: 2px dashed var(--border-color);
                         border-radius: 8px;
                         padding: 3rem 1rem;
                         text-align: center;
-                        color: #64748b;
+                        color: var(--text-color);
+                        opacity: 0.6;
                         font-size: 0.9rem;
                         margin-bottom: 1rem;
                     ">
@@ -2187,3 +2727,27 @@ with tab_atlas:
             f"Fuentes: INEGI, ADIP CDMX, STC Metro, SEMOVI · "
             f"Elaboración propia con QGIS y Python"
         )
+
+# ============================================================
+# FOOTER PROFESIONAL CORREGIDO
+# ============================================================
+st.markdown("<br><br>", unsafe_allow_html=True)
+st.markdown("""
+<div style="text-align:center; padding:2rem 0; border-top:1px solid var(--border-color);
+            margin-top:3rem; background-color: transparent;">
+    <div style="color: var(--text-color); opacity: 0.7; font-size:0.875rem; line-height:1.8;">
+        <div style="font-weight:700; color: var(--text-color); margin-bottom:0.5rem; font-size: 1rem;">
+            Sistema de Valuación Inmobiliaria CDMX
+        </div>
+        <div>
+            Escuela Superior de Cómputo • Instituto Politécnico Nacional
+        </div>
+        <div style="margin-top:0.5rem; font-weight: 600; color: var(--text-color);">
+            Kevin J. González Sosa • José M. Torres Gutiérrez
+        </div>
+        <div style="font-size: 0.75rem; opacity: 0.6; margin-top: 0.25rem;">
+            Trabajo Terminal · ESCOM 2026
+        </div>
+    </div>
+</div>
+""", unsafe_allow_html=True)
