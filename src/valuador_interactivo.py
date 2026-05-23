@@ -2332,7 +2332,17 @@ with tab_valuador:
     # Marcador fijo que muestra la posición actual confirmada (no arrastrable)
     folium.Marker(
         location=[lat_actual, lon_actual],
-        icon=folium.Icon(color="red", icon="home", prefix="fa"),
+        icon=folium.DivIcon(
+            html=(
+                '<div style="font-size:36px;line-height:1;text-align:center;'
+                'filter:drop-shadow(0 3px 6px rgba(0,0,0,0.55));'
+                'user-select:none;-webkit-user-select:none;">&#127968;</div>'
+            ),
+            icon_size=(40, 40),
+            icon_anchor=(20, 36),
+            popup_anchor=(0, -38),
+            class_name="",
+        ),
         tooltip="📍 Posición actual — usa el botón ✏️ (izquierda) para colocar un nuevo marcador",
         popup=folium.Popup(
             f"<b>📍 Punto de análisis</b><br>"
@@ -2344,13 +2354,25 @@ with tab_valuador:
         ),
         draggable=False,
     ).add_to(m)
-
+    # Crea un DivIcon que use texto/emoji o HTML local en lugar de imágenes externas
+    icono_local_draw = folium.DivIcon(
+        html=(
+            '<div style="'
+            'font-size: 32px; line-height: 1; text-align: center;'
+            'filter: drop-shadow(0 2px 4px rgba(0,0,0,0.4));'
+            'user-select: none; -webkit-user-select: none;'
+            '">📍</div>'  # Puedes usar 🏠, 📍 o el emoji que prefieras
+        ),
+        icon_size=(36, 36),
+        icon_anchor=(18, 32) # Ajusta el anclaje para que la punta coincida con la coordenada
+    )
+    
     # Plugin Draw: solo marcadores, para capturar nueva posición confiablemente
     # via last_active_drawing con geometría tipo Point
     from folium.plugins import Draw
     Draw(
         draw_options={
-            "marker":       True,
+            "marker":       True,  # Al dejarlo como True es perfectamente serializable a JSON
             "polyline":     False,
             "polygon":      False,
             "circle":       False,
@@ -2360,6 +2382,51 @@ with tab_valuador:
         edit_options={"edit": False, "remove": False},
         position="topleft",
     ).add_to(m)
+
+   # ── Forzado de ícono local exclusivo para la herramienta Draw ──
+    _icon_css = folium.Element("""
+    <style>
+    /* 1. Ocultar los recursos de imagen .png externos SÓLO para las herramientas de dibujo y arrastre */
+    .leaflet-draw-guide-dash ~ img,
+    .leaflet-mouse-marker,
+    .leaflet-draw-tooltip-marker ~ .leaflet-marker-icon,
+    .leaflet-pane .leaflet-marker-icon[src*="marker-icon"] {
+        background-image: none !important;
+        content: "" !important;
+        opacity: 0 !important;
+    }
+
+    /* 2. Activar la visualización de capas editables y el cursor fantasma de dibujo */
+    .leaflet-mouse-marker,
+    .leaflet-draw-tooltip-marker ~ .leaflet-marker-icon {
+        opacity: 1 !important;
+        background: transparent !important;
+        border: none !important;
+    }
+
+    /* 3. Inyectar el emoji ÚNICAMENTE en el cursor flotante (fantasma) antes de hacer click */
+    .leaflet-mouse-marker::after,
+    .leaflet-draw-tooltip-marker ~ .leaflet-marker-icon::after {
+        content: "🏠" !important;  /* Deja este emoji o cámbialo por un pin 📍 si prefieres diferenciarlos */
+        font-size: 34px !important;
+        line-height: 1 !important;
+        display: block !important;
+        text-align: center !important;
+        filter: drop-shadow(0 2px 5px rgba(0,0,0,0.55)) !important;
+        margin-top: -16px !important;
+        margin-left: -10px !important;
+        user-select: none;
+        -webkit-user-select: none;
+    }
+
+    /* 4. IMPORTANTE: Cuando el usuario suelta el marcador en el mapa, ocultamos el clon temporal */
+    /* de Leaflet.draw para que no se duplique con tu folium.Marker real */
+    .leaflet-layer .leaflet-marker-icon:not(.leaflet-div-icon) {
+        display: none !important;
+    }
+    </style>
+    """)
+    m.get_root().html.add_child(_icon_css)
 
     # Capas de servicios (puntos)
     centro_utm = _latlon_a_utm_mapa(lat_actual, lon_actual)
