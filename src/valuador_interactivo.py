@@ -2456,65 +2456,89 @@ with tab_valuador:
         )
     leyenda_filas = "".join(_fila_leyenda(k, v) for k, v in CAPAS_CONFIG.items())
 
-    # ── Leyenda estática dentro del iframe (solo el marcador visual sin JS) ──
+    # ── Leyenda con toggle JS nativo dentro del iframe de Folium ──
+    # El botón vive DENTRO del mapa → sin st.rerun(), funciona perfecto en móvil.
     leyenda_html_simple = f"""
-    <div style="
+    <div id="leyenda-wrapper" style="
         position: fixed;
         bottom: 30px; left: 30px;
         z-index: 9999;
-        background: rgba(30,41,59,0.97);
-        border: 1px solid rgba(255,255,255,0.15);
-        border-radius: 12px;
-        padding: 10px 14px 10px;
-        box-shadow: 0 4px 20px rgba(0,0,0,0.40);
         font-family: 'Segoe UI', Arial, sans-serif;
-        min-width: 185px;
-        color: #e2e8f0;
-    " id="leyenda-mapa">
-        <div style='font-weight:700;font-size:12.5px;margin-bottom:8px;color:#93C5FD;
-                    border-bottom:2px solid #3B82F6;padding-bottom:5px;'>
-            📍 Servicios en radio 1.2 km
-        </div>
-        {leyenda_filas}
-        <div style='margin-top:8px;padding-top:6px;border-top:1px solid rgba(255,255,255,0.1);
-                    display:flex;align-items:center;gap:6px;font-size:11px;color:#94a3b8;'>
-            <span style='display:inline-block;width:22px;height:0;
-                         border-top:2px dashed #60A5FA;flex-shrink:0;'></span>
-            Límite de colonia
-        </div>
-        <div style='display:flex;align-items:center;gap:6px;font-size:11px;color:#94a3b8;margin-top:4px;'>
-            <span style='display:inline-block;width:22px;height:0;
-                         border-top:2px solid #F87171;flex-shrink:0;'></span>
-            Radio de análisis
+    ">
+        <!-- Botón toggle siempre visible -->
+        <button
+            id="leyenda-toggle-btn"
+            onclick="(function(){{
+                var panel = document.getElementById('leyenda-panel');
+                var btn   = document.getElementById('leyenda-toggle-btn');
+                var oculto = panel.style.display === 'none';
+                panel.style.display = oculto ? 'block' : 'none';
+                btn.title = oculto ? 'Ocultar leyenda' : 'Mostrar leyenda';
+                btn.innerHTML = oculto ? '&#128065;&#65039;' : '&#128065;&#65039;<span style=\\'text-decoration:line-through;position:absolute;left:6px;top:6px;font-size:18px;color:#f87171;\\'>&#47;</span>';
+            }})()"
+            title="Ocultar leyenda"
+            style="
+                width: 36px; height: 36px;
+                border-radius: 8px;
+                border: 1px solid rgba(255,255,255,0.2);
+                background: rgba(30,41,59,0.97);
+                color: #e2e8f0;
+                font-size: 18px;
+                cursor: pointer;
+                display: flex; align-items: center; justify-content: center;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+                margin-bottom: 6px;
+                padding: 0;
+                position: relative;
+                -webkit-tap-highlight-color: transparent;
+            ">👁️</button>
+
+        <!-- Panel de la leyenda -->
+        <div id="leyenda-panel" style="
+            background: rgba(30,41,59,0.97);
+            border: 1px solid rgba(255,255,255,0.15);
+            border-radius: 12px;
+            padding: 10px 14px 10px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.40);
+            min-width: 185px;
+            color: #e2e8f0;
+            transition: opacity 0.2s ease;
+        ">
+            <div style='font-weight:700;font-size:12.5px;margin-bottom:8px;color:#93C5FD;
+                        border-bottom:2px solid #3B82F6;padding-bottom:5px;'>
+                📍 Servicios en radio 1.2 km
+            </div>
+            {leyenda_filas}
+            <div style='margin-top:8px;padding-top:6px;border-top:1px solid rgba(255,255,255,0.1);
+                        display:flex;align-items:center;gap:6px;font-size:11px;color:#94a3b8;'>
+                <span style='display:inline-block;width:22px;height:0;
+                             border-top:2px dashed #60A5FA;flex-shrink:0;'></span>
+                Límite de colonia
+            </div>
+            <div style='display:flex;align-items:center;gap:6px;font-size:11px;color:#94a3b8;margin-top:4px;'>
+                <span style='display:inline-block;width:22px;height:0;
+                             border-top:2px solid #F87171;flex-shrink:0;'></span>
+                Radio de análisis
+            </div>
         </div>
     </div>
     """
 
-    # Solo inyectar la leyenda dentro del mapa si el usuario la quiere visible
-    if st.session_state.get("leyenda_visible", True):
-        m.get_root().html.add_child(folium.Element(leyenda_html_simple))
+    # La leyenda siempre se inyecta; el toggle es JS puro dentro del iframe
+    m.get_root().html.add_child(folium.Element(leyenda_html_simple))
 
-    # Render en Streamlit
-    # ── Inicializar estado de la leyenda ──
-    if "leyenda_visible" not in st.session_state:
-        st.session_state["leyenda_visible"] = True
-
-    # ── Fila: título + botón toggle ──
-    _col_titulo, _col_btn = st.columns([4, 1])
-    with _col_titulo:
-        st.markdown("""
-        <div style="display:flex;align-items:center;gap:10px;margin:1.2rem 0 0.5rem;">
-            <span style="font-size:1.15rem;font-weight:700;letter-spacing:-0.2px;
-                         color:var(--text-primary);">🗺️ Entorno Urbano</span>
-            <span style="background:#1A73E8;color:#fff;font-size:0.7rem;font-weight:700;
-                         padding:3px 11px;border-radius:20px;letter-spacing:0.04em;">RADIO 1.2 KM</span>
-        </div>
-        """, unsafe_allow_html=True)
-    with _col_btn:
-        _icono_btn = "👁️ Leyenda" if st.session_state["leyenda_visible"] else "🙈 Leyenda"
-        if st.button(_icono_btn, key="toggle_leyenda", use_container_width=True):
-            st.session_state["leyenda_visible"] = not st.session_state["leyenda_visible"]
-            st.rerun()
+    # ── Fila: solo el título (el toggle ya está dentro del mapa) ──
+    st.markdown("""
+    <div style="display:flex;align-items:center;gap:10px;margin:1.2rem 0 0.5rem;">
+        <span style="font-size:1.15rem;font-weight:700;letter-spacing:-0.2px;
+                     color:var(--text-primary);">🗺️ Entorno Urbano</span>
+        <span style="background:#1A73E8;color:#fff;font-size:0.7rem;font-weight:700;
+                     padding:3px 11px;border-radius:20px;letter-spacing:0.04em;">RADIO 1.2 KM</span>
+        <span style="font-size:0.72rem;color:var(--text-muted);opacity:0.7;">
+            — usa el botón 👁️ en el mapa para ocultar/mostrar la leyenda
+        </span>
+    </div>
+    """, unsafe_allow_html=True)
 
     if punto_confirmado:
         st.success(
