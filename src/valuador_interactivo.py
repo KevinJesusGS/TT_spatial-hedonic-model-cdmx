@@ -430,35 +430,75 @@ h1, h2, h3, h4, h5, h6 {
     }
 
     /* ── Sidebar móvil: fondo sólido y contraste de texto garantizado ── */
-    @media screen and (max-width: 640px) {
-        section[data-testid="stSidebar"],
-        section[data-testid="stSidebar"] > div,
-        section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"],
-        section[data-testid="stSidebar"] *:not(img):not(svg):not(canvas) {
-            /* Usamos las variables nativas de Streamlit para que cambie según el tema */
-            background-color: var(--background-color, #ffffff) !important;
-            color: var(--text-color, #31333F) !important;
-            backdrop-filter: none !important;
-            -webkit-backdrop-filter: none !important;
-            opacity: 1 !important;
-        }
+    section[data-testid="stSidebar"],
+    section[data-testid="stSidebar"] > div,
+    section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] {
+        background-color: var(--background-color, #ffffff) !important;
+        color: var(--text-color, #31333F) !important;
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+        opacity: 1 !important;
+    }
 
-        /* Forzar el color correcto en etiquetas de inputs, selectores y títulos */
-        section[data-testid="stSidebar"] label,
-        section[data-testid="stSidebar"] p,
-        section[data-testid="stSidebar"] h1,
-        section[data-testid="stSidebar"] h2,
-        section[data-testid="stSidebar"] h3,
-        section[data-testid="stSidebar"] span {
-            color: var(--text-color, #31333F) !important;
-        }
+    /* CORRECCIÓN: Volver transparente SOLO el contenedor interno del slider, no de otros inputs */
+    section[data-testid="stSidebar"] [data-testid="stSlider"] div[data-testid="stMarkdownContainer"],
+    section[data-testid="stSidebar"] [data-testid="stSlider"] > div {
+        background-color: transparent !important;
+    }
 
-        /* Estabilización estructural de la barra en móviles */
-        section[data-testid="stSidebar"] {
-            min-width: 300px !important;
-            box-shadow: 8px 0 32px rgba(0, 0, 0, 0.15) !important;
-            z-index: 999999 !important;
-        }
+    /* Forzar la visibilidad del punto/nodo interactivo en rojo */
+    section[data-testid="stSidebar"] [class*="stSlider"] [role="slider"] {
+        background-color: #DC2626 !important;
+        border: 2px solid #ffffff !important;
+        opacity: 1 !important;
+        z-index: 9999 !important;
+    }
+
+    /* Forzar el color rojo en la barra de progreso activa */
+    section[data-testid="stSidebar"] [class*="stSlider"] div[data-track="true"] {
+        background-color: #DC2626 !important;
+        opacity: 1 !important;
+    }
+
+    /* ── SOLUCIÓN NÚMBER INPUTS (Recámaras, Baños, Estacionamientos) ── */
+    /* Asegurar fondo e iluminación del input numérico */
+    section[data-testid="stSidebar"] [data-testid="stNumberInput"] {
+        background-color: transparent !important;
+    }
+    section[data-testid="stSidebar"] [data-testid="stNumberInput"] input {
+        color: #31333F !important; /* Fuerza texto oscuro en móvil */
+        background-color: #F0F2F6 !important; /* Fondo gris claro nativo para contraste */
+    }
+    
+    /* Forzar visibilidad y color oscuro de los botones (+) y (-) */
+    section[data-testid="stSidebar"] [data-testid="stNumberInput"] button {
+        background-color: #E0E3E9 !important;
+        color: #31333F !important;
+        opacity: 1 !important;
+        border: 1px solid #D1D5DB !important;
+    }
+    
+    /* Asegurar que los iconos internos SVG (+ y -) se pinten oscuros */
+    section[data-testid="stSidebar"] [data-testid="stNumberInput"] button svg {
+        fill: #31333F !important;
+        color: #31333F !important;
+    }
+
+    /* Forzar el color correcto en etiquetas de inputs, selectores y títulos */
+    section[data-testid="stSidebar"] label,
+    section[data-testid="stSidebar"] p,
+    section[data-testid="stSidebar"] h1,
+    section[data-testid="stSidebar"] h2,
+    section[data-testid="stSidebar"] h3,
+    section[data-testid="stSidebar"] span {
+        color: var(--text-color, #31333F) !important;
+    }
+
+    /* Estabilización estructural de la barra en móviles */
+    section[data-testid="stSidebar"] {
+        min-width: 300px !important;
+        box-shadow: 8px 0 32px rgba(0, 0, 0, 0.15) !important;
+        z-index: 999999 !important;
     }
 
     /* ── Inputs en móvil: más altura táctil ── */
@@ -1617,7 +1657,13 @@ with st.sidebar:
         f"{alcaldia_sel}||{colonia_sel}"
     )
 
-    area       = st.slider("Área Habitable (m²)", 25, 500, 120)
+    area = st.sidebar.slider(
+        "Metros Cuadrados (m²):",
+        min_value=20,    # O el valor mínimo configurado en tu dataset
+        max_value=500,   # O tu valor máximo configurado
+        value=85,        # Valor por defecto
+        step=5           # <--- ESTO discretiza la barra en incrementos fijos
+    )
     rooms      = st.number_input("Recámaras", min_value=1, max_value=10, value=3)
     baths      = st.number_input("Baños Completos", min_value=1.0,
                                  max_value=10.0, value=2.0, step=0.5)
@@ -1708,54 +1754,66 @@ with tab_valuador:
     gentrif_fmt = str(round(datos_colonia.get("gentrification_index", 0), 3))
 
     st.markdown(f"""
-    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:1rem;margin-bottom:1.5rem;">
-        <div style="background:var(--bg-surface);border:1.5px solid var(--border-subtle);
-                    border-radius:16px;padding:1.2rem 1.4rem;box-shadow:var(--shadow-sm);
-                    border-top:3px solid #3B82F6;">
-            <div style="font-size:0.72rem;font-weight:700;color:var(--text-muted);
-                        text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.4rem;">
-                Precio Estimado Comercial
-            </div>
-            <div style="font-size:1.55rem;font-weight:800;color:var(--text-primary);
-                        letter-spacing:-0.02em;line-height:1.2;word-break:break-word;">
-                {precio_fmt}
-            </div>
+    <style>
+    .metricas-grid {{
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 1rem;
+        margin-bottom: 1.5rem;
+    }}
+    @media screen and (max-width: 900px) {{
+        .metricas-grid {{
+            grid-template-columns: repeat(2, 1fr);
+        }}
+    }}
+    @media screen and (max-width: 500px) {{
+        .metricas-grid {{
+            grid-template-columns: 1fr;
+        }}
+    }}
+    .metrica-card {{
+        background: var(--secondary-background-color);
+        border: 1.5px solid var(--border-color);
+        border-radius: 16px;
+        padding: 1.2rem 1.4rem;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.04);
+        min-width: 0;
+    }}
+    .metrica-label {{
+        font-size: 0.72rem;
+        font-weight: 700;
+        color: var(--text-color);
+        opacity: 0.6;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin-bottom: 0.4rem;
+    }}
+    .metrica-valor {{
+        font-size: clamp(1.1rem, 2.5vw, 1.55rem);
+        font-weight: 800;
+        color: var(--text-color);
+        letter-spacing: -0.02em;
+        line-height: 1.2;
+        word-break: break-word;
+        overflow-wrap: break-word;
+    }}
+    </style>
+    <div class="metricas-grid">
+        <div class="metrica-card" style="border-top:3px solid #3B82F6;">
+            <div class="metrica-label">Precio Estimado Comercial</div>
+            <div class="metrica-valor">{precio_fmt}</div>
         </div>
-        <div style="background:var(--bg-surface);border:1.5px solid var(--border-subtle);
-                    border-radius:16px;padding:1.2rem 1.4rem;box-shadow:var(--shadow-sm);
-                    border-top:3px solid #10B981;">
-            <div style="font-size:0.72rem;font-weight:700;color:var(--text-muted);
-                        text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.4rem;">
-                Valor Unitario (m²)
-            </div>
-            <div style="font-size:1.55rem;font-weight:800;color:var(--text-primary);
-                        letter-spacing:-0.02em;line-height:1.2;word-break:break-word;">
-                {pm2_fmt}
-            </div>
+        <div class="metrica-card" style="border-top:3px solid #10B981;">
+            <div class="metrica-label">Valor Unitario (m²)</div>
+            <div class="metrica-valor">{pm2_fmt}</div>
         </div>
-        <div style="background:var(--bg-surface);border:1.5px solid var(--border-subtle);
-                    border-radius:16px;padding:1.2rem 1.4rem;box-shadow:var(--shadow-sm);
-                    border-top:3px solid #8B5CF6;">
-            <div style="font-size:0.72rem;font-weight:700;color:var(--text-muted);
-                        text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.4rem;">
-                Segmento / Clúster
-            </div>
-            <div style="font-size:1.55rem;font-weight:800;color:var(--text-primary);
-                        letter-spacing:-0.02em;line-height:1.2;">
-                {seg_fmt}
-            </div>
+        <div class="metrica-card" style="border-top:3px solid #8B5CF6;">
+            <div class="metrica-label">Segmento / Clúster</div>
+            <div class="metrica-valor">{seg_fmt}</div>
         </div>
-        <div style="background:var(--bg-surface);border:1.5px solid var(--border-subtle);
-                    border-radius:16px;padding:1.2rem 1.4rem;box-shadow:var(--shadow-sm);
-                    border-top:3px solid #F59E0B;">
-            <div style="font-size:0.72rem;font-weight:700;color:var(--text-muted);
-                        text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.4rem;">
-                Índice de Gentrificación
-            </div>
-            <div style="font-size:1.55rem;font-weight:800;color:var(--text-primary);
-                        letter-spacing:-0.02em;line-height:1.2;">
-                {gentrif_fmt}
-            </div>
+        <div class="metrica-card" style="border-top:3px solid #F59E0B;">
+            <div class="metrica-label">Índice de Gentrificación</div>
+            <div class="metrica-valor">{gentrif_fmt}</div>
         </div>
     </div>
     """, unsafe_allow_html=True)
