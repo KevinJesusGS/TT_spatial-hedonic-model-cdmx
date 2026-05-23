@@ -317,6 +317,135 @@ h1, h2, h3, h4, h5, h6 {
         border-left: 6px solid #DC2626 !important;
     }
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   DISEÑO RESPONSIVO — MEDIA QUERIES
+   Breakpoints: móvil < 640px | tablet 641-1024px | desktop > 1024px
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── TABLET (641px – 1024px) ──────────────────────────────── */
+@media screen and (max-width: 1024px) {
+    .block-container {
+        padding-left: 1.5rem !important;
+        padding-right: 1.5rem !important;
+        max-width: 100% !important;
+    }
+
+    /* Header institucional: ocultar autores, centrar logos */
+    .authors-section { display: none !important; }
+    .header-content  { gap: 1rem !important; }
+    .main-title      { font-size: 1.35rem !important; }
+
+    /* Tabs más compactos */
+    [data-testid="stTabs"] button {
+        font-size: 0.85rem !important;
+        padding: 0.6rem 1rem !important;
+    }
+
+    /* Galería de mapas: 1 columna */
+    .st-emotion-cache-ocqkz7,
+    [data-testid="column"] { min-width: 100% !important; }
+}
+
+/* ── MÓVIL (≤ 640px) ──────────────────────────────────────── */
+@media screen and (max-width: 640px) {
+    /* Contenedor principal: sin padding lateral excesivo */
+    .block-container {
+        padding-top: 0.75rem !important;
+        padding-left: 0.75rem !important;
+        padding-right: 0.75rem !important;
+    }
+
+    /* ── Header institucional en móvil ── */
+    .premium-header {
+        padding: 1rem 1rem !important;
+        border-radius: 14px !important;
+    }
+    .header-content {
+        flex-direction: column !important;
+        align-items: center !important;
+        gap: 0.75rem !important;
+        text-align: center !important;
+    }
+    .logo-section {
+        justify-content: center !important;
+        gap: 1rem !important;
+    }
+    .logo-divider { display: none !important; }
+    .logo-box {
+        width: 52px !important;
+        height: 52px !important;
+    }
+    .logo-box img { height:48px !important; width:48px !important; }
+    .title-section { text-align: center !important; }
+    .main-title    { font-size: 1.1rem !important; letter-spacing: -0.02em !important; }
+    .subtitle      { font-size: 0.78rem !important; }
+    .authors-section { display: none !important; }
+
+    /* ── Encabezado de sección Atlas ── */
+    .block-container div[style*="border-left: 6px solid"] {
+        padding: 1.2rem 1rem !important;
+        border-radius: 10px !important;
+    }
+
+    /* ── Tabs: scroll horizontal en móvil ── */
+    [data-testid="stTabs"] [role="tablist"] {
+        overflow-x: auto !important;
+        flex-wrap: nowrap !important;
+        -webkit-overflow-scrolling: touch !important;
+        scrollbar-width: none !important;
+    }
+    [data-testid="stTabs"] [role="tablist"]::-webkit-scrollbar { display: none !important; }
+    [data-testid="stTabs"] button {
+        font-size: 0.8rem !important;
+        padding: 0.5rem 0.85rem !important;
+        white-space: nowrap !important;
+        flex-shrink: 0 !important;
+    }
+
+    /* ── Sidebar colapsado por defecto (Streamlit lo maneja pero reforzamos) ── */
+    [data-testid="stSidebar"] {
+        min-width: 0 !important;
+    }
+
+    /* ── Inputs en móvil: más altura táctil ── */
+    [data-testid="stSelectbox"] > div > div,
+    [data-testid="stNumberInput"] input {
+        min-height: 44px !important;
+        font-size: 1rem !important;
+    }
+
+    /* ── Métricas: 1 por fila ── */
+    [data-testid="stMetric"] {
+        padding: 1rem !important;
+        border-radius: 12px !important;
+    }
+
+    /* ── Galería de mapas: 1 columna, sin gap grande ── */
+    [data-testid="column"] {
+        min-width: 100% !important;
+        padding: 0 !important;
+    }
+
+    /* ── Badges de categoría más pequeños ── */
+    .servicio-badge { padding: 8px 8px !important; }
+    .servicio-badge .s-numero { font-size: 0.95rem !important; }
+    .servicios-grid {
+        grid-template-columns: repeat(auto-fit, minmax(80px, 1fr)) !important;
+        gap: 8px !important;
+    }
+
+    /* ── Tipografía global reducida ── */
+    h1 { font-size: 1.4rem !important; }
+    h2 { font-size: 1.2rem !important; }
+    h3 { font-size: 1rem !important; }
+
+    /* ── Footer ── */
+    div[style*="text-align:center"][style*="border-top"] {
+        padding: 1rem 0 !important;
+        font-size: 0.78rem !important;
+    }
+}
 </style>
 """, unsafe_allow_html=True)
 
