@@ -326,6 +326,7 @@ section[data-testid="stSidebar"] {
     .authors-section { display: none !important; }
 }
 @media screen and (max-width: 640px) {
+    /* Contenedor principal: sin padding lateral excesivo */
     .block-container {
         padding-left: 0.75rem !important;
         padding-right: 0.75rem !important;
@@ -339,7 +340,158 @@ section[data-testid="stSidebar"] {
     .logo-divider { display: none !important; }
     .main-title { font-size: 1.2rem !important; }
     .stat-grid { grid-template-columns: repeat(2, 1fr) !important; }
+
+    /* ── Header institucional en móvil ── */
+    .premium-header {
+        padding: 1rem 1rem !important;
+        border-radius: 14px !important;
+    }
+    .logo-section {
+        justify-content: center !important;
+        gap: 1rem !important;
+    }
+    .logo-box {
+        width: 52px !important;
+        height: 52px !important;
+    }
+    .logo-box img { height:48px !important; width:48px !important; }
+    .title-section { text-align: center !important; }
+    .main-title    { font-size: 1.1rem !important; letter-spacing: -0.02em !important; }
+    .subtitle      { font-size: 0.78rem !important; }
+    .authors-section { display: none !important; }
+
+    /* ── Encabezado de sección Atlas ── */
+    .block-container div[style*="border-left: 6px solid"] {
+        padding: 1.2rem 1rem !important;
+        border-radius: 10px !important;
+    }
+
+    /* ── Tabs: scroll horizontal en móvil ── */
+    [data-testid="stTabs"] [role="tablist"] {
+        overflow-x: auto !important;
+        flex-wrap: nowrap !important;
+        -webkit-overflow-scrolling: touch !important;
+        scrollbar-width: none !important;
+    }
+    [data-testid="stTabs"] [role="tablist"]::-webkit-scrollbar { display: none !important; }
+    [data-testid="stTabs"] button {
+        font-size: 0.8rem !important;
+        padding: 0.5rem 0.85rem !important;
+        white-space: nowrap !important;
+        flex-shrink: 0 !important;
+    }
+
+    /* ── Sidebar móvil: fondo sólido y contraste de texto garantizado ── */
+    section[data-testid="stSidebar"],
+    section[data-testid="stSidebar"] > div,
+    section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] {
+        background-color: var(--background-color, #ffffff) !important;
+        color: var(--text-color, #31333F) !important;
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+        opacity: 1 !important;
+    }
+
+    /* CORRECCIÓN: Volver transparente SOLO el contenedor interno del slider, no de otros inputs */
+    section[data-testid="stSidebar"] [data-testid="stSlider"] div[data-testid="stMarkdownContainer"],
+    section[data-testid="stSidebar"] [data-testid="stSlider"] > div {
+        background-color: transparent !important;
+    }
+
+    /* Forzar la visibilidad del punto/nodo interactivo en rojo */
+    section[data-testid="stSidebar"] [class*="stSlider"] [role="slider"] {
+        background-color: #DC2626 !important;
+        border: 2px solid #ffffff !important;
+        opacity: 1 !important;
+        z-index: 9999 !important;
+    }
+
+    /* Forzar el color rojo en la barra de progreso activa */
+    section[data-testid="stSidebar"] [class*="stSlider"] div[data-track="true"] {
+        background-color: #DC2626 !important;
+        opacity: 1 !important;
+    }
+
+    /* ── SOLUCIÓN NÚMBER INPUTS (Recámaras, Baños, Estacionamientos) ── */
+    /* Asegurar fondo e iluminación del input numérico */
+    section[data-testid="stSidebar"] [data-testid="stNumberInput"] {
+        background-color: transparent !important;
+    }
+    section[data-testid="stSidebar"] [data-testid="stNumberInput"] input {
+        color: #31333F !important; /* Fuerza texto oscuro en móvil */
+        background-color: #F0F2F6 !important; /* Fondo gris claro nativo para contraste */
+    }
+    
+    /* Forzar visibilidad y color oscuro de los botones (+) y (-) */
+    section[data-testid="stSidebar"] [data-testid="stNumberInput"] button {
+        background-color: #E0E3E9 !important;
+        color: #31333F !important;
+        opacity: 1 !important;
+        border: 1px solid #D1D5DB !important;
+    }
+    
+    /* Asegurar que los iconos internos SVG (+ y -) se pinten oscuros */
+    section[data-testid="stSidebar"] [data-testid="stNumberInput"] button svg {
+        fill: #31333F !important;
+        color: #31333F !important;
+    }
+
+    /* Forzar el color correcto en etiquetas de inputs, selectores y títulos */
+    section[data-testid="stSidebar"] label,
+    section[data-testid="stSidebar"] p,
+    section[data-testid="stSidebar"] h1,
+    section[data-testid="stSidebar"] h2,
+    section[data-testid="stSidebar"] h3,
+    section[data-testid="stSidebar"] span {
+        color: var(--text-color, #31333F) !important;
+    }
+
+    /* Estabilización estructural de la barra en móviles */
+    section[data-testid="stSidebar"] {
+        min-width: 300px !important;
+        box-shadow: 8px 0 32px rgba(0, 0, 0, 0.15) !important;
+        z-index: 999999 !important;
+    }
+
+    /* ── Inputs en móvil: más altura táctil ── */
+    [data-testid="stSelectbox"] > div > div,
+    [data-testid="stNumberInput"] input {
+        min-height: 44px !important;
+        font-size: 1rem !important;
+    }
+
+    /* ── Métricas: 1 por fila ── */
+    [data-testid="stMetric"] {
+        padding: 1rem !important;
+        border-radius: 12px !important;
+    }
+
+    /* ── Galería de mapas: 1 columna, sin gap grande ── */
+    [data-testid="column"] {
+        min-width: 100% !important;
+        padding: 0 !important;
+    }
+
+    /* ── Badges de categoría más pequeños ── */
+    .servicio-badge { padding: 8px 8px !important; }
+    .servicio-badge .s-numero { font-size: 0.95rem !important; }
+    .servicios-grid {
+        grid-template-columns: repeat(auto-fit, minmax(80px, 1fr)) !important;
+        gap: 8px !important;
+    }
+
+    /* ── Tipografía global reducida ── */
+    h1 { font-size: 1.4rem !important; }
+    h2 { font-size: 1.2rem !important; }
+    h3 { font-size: 1rem !important; }
+
+    /* ── Footer ── */
+    div[style*="text-align:center"][style*="border-top"] {
+        padding: 1rem 0 !important;
+        font-size: 0.78rem !important;
+    }
 }
+
 
 /* ─── SCROLLBAR ─────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 8px; }
