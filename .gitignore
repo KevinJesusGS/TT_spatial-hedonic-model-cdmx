@@ -2,9 +2,6 @@ __pycache__/
 *.pyc
 .ipynb_checkpoints/
 
-outputs/
-*.png
-
 .env
 .vscode/
 

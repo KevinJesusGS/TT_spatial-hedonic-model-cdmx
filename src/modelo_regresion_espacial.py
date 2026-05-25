@@ -876,8 +876,11 @@ print("="*80)
 # --- METRO ---
 metro = gpd.read_file(path_metro).to_crs(epsg=32614)
 # Explotamos por si viene como MultiPoint y filtramos puntos válidos
-metro_exploded = metro.geometry.explode(index_parts=False)
-metro_pts = np.array([(g.x, g.y) for g in metro_exploded if g.geom_type == "Point"])
+metro_pts = np.array([
+    (g.x, g.y)
+    for g in metro.geometry.explode(index_parts=False)
+    if g.geom_type == "Point"
+])
 
 df["dist_metro_m"] = nearest_distance(metro_pts, coords)
 df["density_metro"] = density_proxy(gdf_utm, metro_pts, 500)
@@ -977,6 +980,7 @@ import pyogrio
 
 # Configuración para restaurar archivos .shx faltantes automáticamente
 os.environ["SHAPE_RESTORE_SHX"] = "YES"
+
 
 def safe_load_geodata(path, label, epsg=32614):
     
@@ -1178,7 +1182,10 @@ try:
     y_moran = gdf_moran["price_m2_raw"].values.astype(float)
 
     # 3. Construir la matriz de pesos espaciales (k-vecinos más cercanos)
-    w_knn = libpysal.weights.KNN.from_dataframe(gdf_moran, k=8)
+    w_knn = libpysal.weights.KNN.from_dataframe(
+        gdf_moran,
+        k=min(8, len(gdf_moran) - 1)
+    )
     w_knn.transform = 'R'  # Estandarización por filas
 
     # 4. Calcular el Índice de Moran Global
@@ -1187,12 +1194,11 @@ try:
     # 5. Extraer valores de forma segura con np.asarray + float()
     i_value  = float(np.asarray(moran_global.I).flat[0])
     p_value  = float(np.asarray(moran_global.p_sim).flat[0])
-    z_native = float(np.asarray(moran_global.z_norm).flat[0])   # z_norm es el atributo correcto
+    z_value = float(np.asarray(moran_global.z_norm).flat[0])
 
     # 6. Corregir consistencia de signo del Z-score
     n_samples   = len(y_moran)
-    ei_teorico  = -1.0 / (n_samples - 1) if n_samples > 1 else 0.0
-    z_score     = abs(z_native) if i_value > ei_teorico else -abs(z_native)
+    z_score     = abs(z_value) 
 
     # Imprimir resultados formateados
     print(f"✓ Índice de Moran Global (I): {i_value:.4f}")
@@ -1506,27 +1512,57 @@ print(f"Atributos intrínsecos finales: {len(features)}")
 # ==============================================================================
 # 2. FUNCIONES ESPACIALES CORREGIDAS (Garantizan salida como vectores limpios)
 # ==============================================================================
-def compute_spatial_lag(train_coords, train_prices, target_coords, k=10):
+# ======================================================
+# FUNCIONES ESPACIALES CORREGIDAS (SIN LEAKAGE)
+# ======================================================
+
+def compute_spatial_lag(train_coords, train_prices, target_coords, k=20, is_self=False):
+    """
+    Calcula el rezago espacial (promedio ponderado) de los precios vecinos.
+    Si is_self=True, se excluye el punto propio (útil para entrenamiento).
+    """
+
     tree = cKDTree(train_coords)
-    d, ix = tree.query(target_coords, k=min(k, len(train_coords)))  
 
-    if k == 1:
-        d = d.reshape(-1, 1)
-        ix = ix.reshape(-1, 1)
+    fetch = min(k + 1, len(train_coords))
 
-    weights = 1 / (d + 1e-5)
-    lag_values = []
+    d, ix = tree.query(target_coords, k=fetch)
 
-    for idxs, w in zip(ix, weights):
-        lag_values.append(np.average(train_prices[idxs], weights=w))
+    if is_self:
+        d, ix = d[:, 1:], ix[:, 1:]
+
+    weights = 1.0 / (d + 10.0)
+
+    lag_values = [
+        np.average(train_prices[idxs], weights=w)
+        for idxs, w in zip(ix, weights)
+    ]
 
     return np.log1p(np.array(lag_values))
 
 
 def compute_local_neighbor_price(train_coords, train_prices, target_coords, k=15):
-    nbrs = NearestNeighbors(n_neighbors=min(k, len(train_coords))).fit(train_coords)
+    """
+    Calcula el precio promedio de los k vecinos más cercanos.
+    Se excluye el propio punto cuando corresponde.
+    """
+
+    nbrs = NearestNeighbors(
+        n_neighbors=min(k + 1, len(train_coords)),
+        algorithm='ball_tree'
+    )
+
+    nbrs.fit(train_coords)
+
     _, indices = nbrs.kneighbors(target_coords)
-    return np.array([train_prices[idx].mean() for idx in indices])
+
+    if np.array_equal(train_coords, target_coords):
+        indices = indices[:, 1:]
+
+    return np.array([
+        train_prices[idx].mean()
+        for idx in indices
+    ])
 
 
 # ==============================================================================

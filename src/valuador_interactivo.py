@@ -1659,10 +1659,10 @@ with st.sidebar:
 
     area = st.sidebar.slider(
         "Metros Cuadrados (m²):",
-        min_value=20,    # O el valor mínimo configurado en tu dataset
-        max_value=500,   # O tu valor máximo configurado
-        value=85,        # Valor por defecto
-        step=5           # <--- ESTO discretiza la barra en incrementos fijos
+        min_value=20,    
+        max_value=500,   
+        value=85,        
+        step=5           
     )
     rooms      = st.number_input("Recámaras", min_value=1, max_value=10, value=3)
     baths      = st.number_input("Baños Completos", min_value=1.0,
@@ -2478,7 +2478,7 @@ with tab_valuador:
     }
 
     /* 4. IMPORTANTE: Cuando el usuario suelta el marcador en el mapa, ocultamos el clon temporal */
-    /* de Leaflet.draw para que no se duplique con tu folium.Marker real */
+    /* de Leaflet.draw */
     .leaflet-layer .leaflet-marker-icon:not(.leaflet-div-icon) {
         display: none !important;
     }
@@ -2848,7 +2848,6 @@ with tab_atlas:
     """, unsafe_allow_html=True)
 
     # ── Definición de mapas ──────────────────────────────────
-    # Ajusta la ruta base a donde guardes tus PNGs exportados de QGIS
     MAPAS_DIR = os.path.join(PROJECT_ROOT, "..", "outputs", "assets", "mapas_qgis")
 
     MAPAS_ATLAS = [
