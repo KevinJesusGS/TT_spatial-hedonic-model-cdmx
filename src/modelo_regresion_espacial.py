@@ -2697,3 +2697,92 @@ plt.savefig(os.path.join(FIGURES_PATH, "comparativa_mercados.png"))
 
 print(f"\n✓ Gráficas de defensa generadas exitosamente en: {FIGURES_PATH}")
 
+# ======================================================
+# GRÁFICA: EVOLUCIÓN DE PRECIOS REALES 2022 vs 2025
+# Deflactada por inflación acumulada INPC (INEGI)
+# INPC dic-2021: 126.478 | INPC dic-2024: 143.042
+# Fuente: INEGI / SAF CDMX
+# ======================================================
+
+INPC_2022 = 126.478  # Diciembre 2021 (base período 2022)
+INPC_2025 = 143.042  # Diciembre 2024 (base período 2025)
+INFLACION_ACUMULADA = (INPC_2025 - INPC_2022) / INPC_2022  # ≈ 0.131 → 13.1%
+
+# Deflactar precios 2022 a pesos de 2025
+comparacion["precio_2022_real"] = comparacion["precio_2022"] * (1 + INFLACION_ACUMULADA)
+
+# Incremento real (descontando inflación)
+comparacion["incremento_real_%"] = (
+    (comparacion["precio_m2_2025"] - comparacion["precio_2022_real"])
+    / comparacion["precio_2022_real"]
+) * 100
+
+# --- GRÁFICA ---
+fig, ax = plt.subplots(figsize=(12, 8))
+
+comparacion_sorted = comparacion.sort_values("incremento_real_%", ascending=True)
+
+colores = ["forestgreen" if v >= 0 else "firebrick" 
+           for v in comparacion_sorted["incremento_real_%"]]
+
+ax.barh(
+    comparacion_sorted["alcaldia"],
+    comparacion_sorted["incremento_real_%"],
+    color=colores
+)
+
+ax.axvline(0, color="black", linewidth=0.8, linestyle="--")
+
+# Etiquetas correctas para positivos y negativos
+for i, val in enumerate(comparacion_sorted["incremento_real_%"]):
+    if val >= 0:
+        x_pos = val + 0.5
+        ha = "left"
+    else:
+        x_pos = val - 0.5
+        ha = "right"
+
+    ax.text(x_pos, i, f"{val:.1f}%", va="center", ha=ha, fontsize=9,
+            color="forestgreen" if val >= 0 else "firebrick")
+
+ax.set_title(
+    "Incremento real del precio por m² (2022–2025)\n"
+    f"Deflactado por inflación acumulada INPC ≈ {INFLACION_ACUMULADA*100:.1f}%"
+    f"  (INPC dic-2021: {INPC_2022} → dic-2024: {INPC_2025})  ·  Fuente: INEGI",
+    fontsize=12
+)
+ax.set_xlabel("Incremento real (%)")
+ax.set_ylabel("")
+plt.tight_layout()
+
+plt.savefig(
+    os.path.join(FIGURES_PATH, "incremento_real_inflacion_2022_2025.png"),
+    dpi=300,
+    bbox_inches="tight"
+)
+plt.show()
+
+# --- TABLA RESUMEN EN CONSOLA ---
+print("\n" + "="*75)
+print(f"INCREMENTO REAL DE PRECIOS (DESCONTANDO INFLACIÓN ≈ {INFLACION_ACUMULADA*100:.1f}%)")
+print("="*75)
+
+resumen = comparacion_sorted[[
+    "alcaldia",
+    "precio_2022",
+    "precio_2022_real",
+    "precio_m2_2025",
+    "incremento_%",
+    "incremento_real_%"
+]].copy()
+
+resumen.columns = [
+    "Alcaldía",
+    "Precio 2022 nominal",
+    "Precio 2022 en $2025",
+    "Precio 2025",
+    "Incremento nominal %",
+    "Incremento real %"
+]
+
+print(resumen.to_string(index=False))

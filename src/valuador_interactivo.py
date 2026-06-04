@@ -50,6 +50,37 @@ warnings.filterwarnings("ignore")
 import folium
 from streamlit_folium import st_folium
 
+# ============================================================
+# ÍNDICES DE GENTRIFICACIÓN POR ALCALDÍA (corregidos)
+# ============================================================
+GENTRIFICACION_ALCALDIA = {
+    "iztapalapa": 1.0,
+    "benito juarez": 0.933319962,
+    "miguel hidalgo": 0.858584906,
+    "cuauhtemoc": 0.830531038,
+    "gustavo a. madero": 0.829803448,
+    "azcapotzalco": 0.779934115,
+    "iztacalco": 0.76261182,
+    "venustiano carranza": 0.761616411,
+    "coyoacan": 0.750956199,
+    "tlahuac": 0.57731379,
+    "xochimilco": 0.56819537,
+    "milpa alta": 0.552341744,
+    "cuajimalpa de morelos": 0.494274373,
+    "tlalpan": 0.391931124,
+    "la magdalena contreras": 0.323324937,
+    "alvaro obregon": 0.0,
+}
+
+def normalizar_alcaldia(nombre):
+    """Convierte a minúsculas, elimina acentos y espacios extra"""
+    if pd.isna(nombre):
+        return ""
+    nombre = str(nombre).lower().strip()
+    # Eliminar acentos
+    import unicodedata
+    nombre = unicodedata.normalize('NFKD', nombre).encode('ASCII', 'ignore').decode('utf-8')
+    return nombre
 
 # ============================================================
 # CONFIGURACIÓN DE LA INTERFAZ DE STREAMLIT
@@ -80,9 +111,6 @@ _stcomp.html(_SIDEBAR_PATCH, height=0, scrolling=False)
 
 # ============================================================
 # CSS GLOBAL + ENCABEZADO INSTITUCIONAL
-# Se define aquí (justo después de set_page_config) para que
-# Streamlit lo renderice antes de cualquier otro elemento.
-# Los logos se cargan con rutas relativas al script.
 # ============================================================
 import base64 as _b64
 import os as _os
@@ -107,8 +135,6 @@ def _find_logo(filename):
 
 _escom_b64 = _img_to_b64(_find_logo("escom.png"))
 _ipn_b64   = _img_to_b64(_find_logo("ipn.png"))
-
-import streamlit.components.v1 as _components
 
 # ============================================================
 # SISTEMA DE DISEÑO PROFESIONAL - ADAPTATIVO TOTAL (V3)
@@ -931,7 +957,6 @@ def preparar_sistema():
 
     # ============================================================
     # CLAVE ÚNICA ALCALDÍA + COLONIA
-    # Evita confusión entre colonias homónimas
     # ============================================================
     df["colonia_key"] = (
         df["alcaldia_real"].astype(str)
@@ -941,6 +966,15 @@ def preparar_sistema():
 
     df = df.dropna(subset=["colonia_real", "alcaldia_real"]).copy()
     df = df.reset_index(drop=True)
+
+    # --- SOBRESCRIBIR EL ÍNDICE DE GENTRIFICACIÓN POR ALCALDÍA ---
+    # (Corrección: Álvaro Obregón = 0.0)
+    df["alcaldia_norm"] = df["alcaldia_real"].apply(normalizar_alcaldia)
+    df["gentrification_index"] = df["alcaldia_norm"].map(GENTRIFICACION_ALCALDIA)
+    # Si alguna alcaldía no está en el diccionario (por fallo en normalización),
+    # usar 0.5 como valor neutral (no debería ocurrir, pero por seguridad)
+    df["gentrification_index"] = df["gentrification_index"].fillna(0.5)
+    df.drop(columns=["alcaldia_norm"], inplace=True)
 
     gdf_utm2    = gpd.GeoDataFrame(
         df.copy(),

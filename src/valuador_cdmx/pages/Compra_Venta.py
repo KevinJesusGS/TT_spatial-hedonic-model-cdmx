@@ -50,6 +50,36 @@ warnings.filterwarnings("ignore")
 import folium
 from streamlit_folium import st_folium
 
+# ============================================================
+# ÍNDICES DE GENTRIFICACIÓN POR ALCALDÍA (corregidos)
+# ============================================================
+GENTRIFICACION_ALCALDIA = {
+    "iztapalapa": 1.0,
+    "benito juarez": 0.933319962,
+    "miguel hidalgo": 0.858584906,
+    "cuauhtemoc": 0.830531038,
+    "gustavo a. madero": 0.829803448,
+    "azcapotzalco": 0.779934115,
+    "iztacalco": 0.76261182,
+    "venustiano carranza": 0.761616411,
+    "coyoacan": 0.750956199,
+    "tlahuac": 0.57731379,
+    "xochimilco": 0.56819537,
+    "milpa alta": 0.552341744,
+    "cuajimalpa de morelos": 0.494274373,
+    "tlalpan": 0.391931124,
+    "la magdalena contreras": 0.323324937,
+    "alvaro obregon": 0.0,
+}
+
+def normalizar_alcaldia(nombre):
+    """Convierte a minúsculas, elimina acentos y espacios extra"""
+    if pd.isna(nombre):
+        return ""
+    nombre = str(nombre).lower().strip()
+    import unicodedata
+    nombre = unicodedata.normalize('NFKD', nombre).encode('ASCII', 'ignore').decode('utf-8')
+    return nombre
 
 # ============================================================
 # CONFIGURACIÓN DE LA INTERFAZ DE STREAMLIT
@@ -965,6 +995,16 @@ def preparar_sistema():
 
     df = df.dropna(subset=["colonia_real", "alcaldia_real"]).copy()
     df = df.reset_index(drop=True)
+
+    # ============================================================
+    # SOBRESCRIBIR EL ÍNDICE DE GENTRIFICACIÓN POR ALCALDÍA
+    # ============================================================
+    df["alcaldia_norm"] = df["alcaldia_real"].apply(normalizar_alcaldia)
+    df["gentrification_index"] = df["alcaldia_norm"].map(GENTRIFICACION_ALCALDIA)
+    # Si alguna alcaldía no está en el diccionario (por fallo en normalización),
+    # usar 0.5 como valor neutral (no debería ocurrir, pero por seguridad)
+    df["gentrification_index"] = df["gentrification_index"].fillna(0.5)
+    df.drop(columns=["alcaldia_norm"], inplace=True)
 
     gdf_utm2    = gpd.GeoDataFrame(
         df.copy(),
